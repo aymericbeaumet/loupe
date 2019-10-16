@@ -1,0 +1,9 @@
+[package]
+name = "mem"
+version = "0.1.0"
+authors = ["Aymeric Beaumet <hi@aymericbeaumet.com>"]
+edition = "2018"
+
+[dependencies]
+memmap = "0.7.0"
+nix = "0.15.0"
