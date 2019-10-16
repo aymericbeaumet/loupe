@@ -19,14 +19,14 @@ impl<T> Store<T> {
   }
 
   pub fn chunk(&self, index: usize) -> &T {
-    let mut ptr = self.mmap.as_ptr();
-    let mut ptr = unsafe { ptr.offset(self.offset(index)) } as *const _ as *const T;
+    let ptr = self.mmap.as_ptr();
+    let ptr = unsafe { ptr.offset(self.offset(index)) } as *const _ as *const T;
     unsafe { &*ptr }
   }
 
   pub fn chunk_mut(&mut self, index: usize) -> &mut T {
-    let mut ptr = self.mmap.as_mut_ptr();
-    let mut ptr = unsafe { ptr.offset(self.offset(index)) } as *mut _ as *mut T;
+    let ptr = self.mmap.as_mut_ptr();
+    let ptr = unsafe { ptr.offset(self.offset(index)) } as *mut _ as *mut T;
     unsafe { &mut *ptr }
   }
 
