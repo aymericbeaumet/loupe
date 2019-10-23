@@ -1,8 +1,9 @@
 use crate::index::Index;
 use rocket::config::{Config, Environment};
+use rocket::State;
 use rocket_contrib::json::Json;
-use rocksdb::DB;
-use serde::Deserialize;
+use rocksdb::{WriteBatch, DB};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -17,7 +18,8 @@ fn default_now() -> u64 {
     .as_millis() as u64
 }
 
-#[derive(Debug, Deserialize)]
+// TODO: remove serialiaze when switching to CBOR for RocksDB
+#[derive(Debug, Deserialize, Serialize)]
 struct Record {
   #[serde(default = "default_id")]
   id: String,
@@ -33,26 +35,33 @@ struct Record {
 }
 
 #[post("/records", format = "json", data = "<records>")]
-fn index(records: Json<Vec<Record>>) -> &'static str {
+fn index(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
   println!("{:#?}", records);
-  "Hello, parent!"
+  let mut batch = WriteBatch::default();
+  for record in records.into_inner() {
+    batch
+      .put(
+        record.id.as_bytes(),
+        // TODO: CBOR
+        serde_json::to_string(&record).unwrap().as_bytes(),
+      )
+      .unwrap();
+  }
+  db.write(batch).unwrap();
+  ""
 }
 
 pub fn main(index: &mut Index) -> Result<(), Box<dyn std::error::Error>> {
   let db = DB::open_default("records.rocksdb")?;
-  db.put(b"my key", b"my value")?;
-  match db.get(b"my key") {
-    Ok(Some(value)) => println!("retrieved value {}", value.to_utf8().unwrap()),
-    Ok(None) => println!("value not found"),
-    Err(e) => println!("operational problem encountered: {}", e),
-  }
-  db.delete(b"my key")?;
 
   let config = Config::build(Environment::Development)
     .address("0.0.0.0")
     .port(9191)
     .finalize()?;
-  rocket::custom(config).mount("/", routes![index]).launch();
+  rocket::custom(config)
+    .manage(db)
+    .mount("/", routes![index])
+    .launch();
 
   Ok(())
 }
