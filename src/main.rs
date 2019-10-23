@@ -1,24 +1,32 @@
-mod mem;
+mod index;
+mod store;
 
-use mem::graph::Graph;
+use index::Index;
 use nix::unistd::{fork, ForkResult};
+use rocksdb::DB;
+use tokio::runtime::Runtime;
 
-fn main() {
-    let mut graph = Graph::new();
-
-    match fork() {
-        Ok(ForkResult::Parent { .. }) => parent(&mut graph),
-        Ok(ForkResult::Child) => child(&graph),
-        Err(_) => println!("Fork failed"),
-    }
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let mut index = Index::new();
+  match fork()? {
+    ForkResult::Parent { .. } => Runtime::new()?.block_on(parent(&mut index)),
+    ForkResult::Child => Runtime::new()?.block_on(child(&index)),
+  };
+  Ok(())
 }
 
-fn parent(graph: &mut Graph) {
-    let mut node = graph.root_mut();
-    node.index = 0xAB0C_D0EF;
+async fn parent(index: &mut Index) -> Result<(), Box<dyn std::error::Error>> {
+  let db = DB::open_default("records.rocksdb")?;
+  db.put(b"my key", b"my value")?;
+  match db.get(b"my key") {
+    Ok(Some(value)) => println!("retrieved value {}", value.to_utf8().unwrap()),
+    Ok(None) => println!("value not found"),
+    Err(e) => println!("operational problem encountered: {}", e),
+  }
+  db.delete(b"my key")?;
+  Ok(())
 }
 
-fn child(graph: &Graph) {
-    let node = graph.root();
-    println!("{:X?}", node);
+async fn child(index: &Index) -> Result<(), Box<dyn std::error::Error>> {
+  Ok(())
 }

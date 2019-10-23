@@ -7,3 +7,6 @@ edition = "2018"
 [dependencies]
 memmap = "0.7.0"
 nix = "0.15.0"
+rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb.git", rev = "a12092d1c6f901e3ec29cb1c10aaa3775c4228dc" }
+serde_json = "1.0.41"
+tokio = "0.2.0-alpha.6"
