@@ -6,7 +6,7 @@ fn index() -> &'static str {
   "Hello, child!"
 }
 
-pub async fn main(index: &Index) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(index: &Index) -> Result<(), Box<dyn std::error::Error>> {
   let config = Config::build(Environment::Development)
     .address("0.0.0.0")
     .port(9292)
