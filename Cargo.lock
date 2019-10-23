@@ -493,12 +493,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "matches"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "mem"
+name = "loupe"
 version = "0.1.0"
 dependencies = [
  "memmap 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -508,6 +503,11 @@ dependencies = [
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "matches"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "memchr"
