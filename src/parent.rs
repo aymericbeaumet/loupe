@@ -18,7 +18,6 @@ fn default_now() -> u64 {
     .as_millis() as u64
 }
 
-// TODO: remove serialiaze when switching to CBOR for RocksDB
 #[derive(Debug, Deserialize, Serialize)]
 struct Record {
   #[serde(default = "default_id")]
@@ -29,21 +28,18 @@ struct Record {
   created_at: u64,
   #[serde(default = "default_now")]
   updated_at: u64,
-
   #[serde(flatten)]
   attributes: HashMap<String, serde_json::Value>,
 }
 
 #[post("/records", format = "json", data = "<records>")]
-fn index(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
-  println!("{:#?}", records);
+fn add_records(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
   let mut batch = WriteBatch::default();
   for record in records.into_inner() {
     batch
       .put(
         record.id.as_bytes(),
-        // TODO: CBOR
-        serde_json::to_string(&record).unwrap().as_bytes(),
+        serde_json::to_string(&record).unwrap(),
       )
       .unwrap();
   }
@@ -54,13 +50,18 @@ fn index(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
 pub fn main(index: &mut Index) -> Result<(), Box<dyn std::error::Error>> {
   let db = DB::open_default("records.rocksdb")?;
 
+  for (_, value) in db.iterator(rocksdb::IteratorMode::Start) {
+    let value: Record = serde_json::from_slice(&value).unwrap();
+    println!("{:#?}", value);
+  }
+
   let config = Config::build(Environment::Development)
     .address("0.0.0.0")
     .port(9191)
     .finalize()?;
   rocket::custom(config)
     .manage(db)
-    .mount("/", routes![index])
+    .mount("/", routes![add_records])
     .launch();
 
   Ok(())
