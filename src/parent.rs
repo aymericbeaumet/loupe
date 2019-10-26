@@ -19,7 +19,7 @@ fn add_records(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
   ""
 }
 
-pub fn main(index: &mut Index) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(mut index: Index) -> Result<(), Box<dyn std::error::Error>> {
   let db = DB::open_default("records.rocksdb")?;
 
   for (_, record) in db.iterator(rocksdb::IteratorMode::Start) {

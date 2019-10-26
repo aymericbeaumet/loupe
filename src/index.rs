@@ -1,4 +1,4 @@
-use crate::store::Store;
+use crate::arena::Arena;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,20 +28,38 @@ pub struct Record {
   pub attributes: HashMap<String, serde_json::Value>,
 }
 
-pub struct Index {
-  store: Store,
+pub struct Node256 {
+  pub foobar: u32,
 }
+
+pub struct Index {
+  arena: Arena<Node256>,
+  root: *mut Node256,
+}
+
+unsafe impl Send for Index {}
+unsafe impl Sync for Index {}
 
 impl Index {
   pub fn new() -> Self {
-    Self {
-      store: Store::new(4096),
-    }
+    let mut index = Self {
+      arena: Arena::new(65536),
+      root: std::ptr::null_mut(),
+    };
+    index.root = index.arena.alloc();
+    index
   }
 
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
-    let slice = self.store.append(bytes);
-    let record: Record = serde_json::from_slice(slice).unwrap();
-    println!("{:#?}", record);
+    let root = self.get_root_mut();
+    root.foobar = 42;
+  }
+
+  pub fn get_root(&self) -> &Node256 {
+    unsafe { &*self.root }
+  }
+
+  fn get_root_mut(&mut self) -> &mut Node256 {
+    unsafe { &mut *self.root }
   }
 }
