@@ -11,7 +11,7 @@ struct Body {
 
 #[post("/", format = "json", data = "<body>")]
 fn query(index: State<Index>, body: Json<Body>) -> String {
-  index.get_root().foobar.to_string()
+  index.query(&body.query).to_string()
 }
 
 pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {

@@ -55,7 +55,11 @@ impl Index {
     root.foobar = 42;
   }
 
-  pub fn get_root(&self) -> &Node256 {
+  pub fn query(&self, query: &str) -> u32 {
+    self.get_root().foobar
+  }
+
+  fn get_root(&self) -> &Node256 {
     unsafe { &*self.root }
   }
 
