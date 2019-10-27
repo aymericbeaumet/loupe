@@ -30,9 +30,8 @@ fn add_records(
 fn dot(index: State<Arc<Mutex<Index>>>) -> String {
   let index = index.lock().unwrap();
   let mut output = vec!["digraph index {".to_owned()];
-  // TODO: what we want here are vertices, not nodes
-  for (i, _node) in index.nodes().enumerate() {
-    output.push(format!("  \"{}\"", i));
+  for ((parent_key, _parent_node), (child_key, _child_node)) in index.edges() {
+    output.push(format!("  \"{:X?}\" -> \"{:X?}\"", parent_key, child_key));
   }
   output.push("}".to_owned());
   output.push("".to_owned());

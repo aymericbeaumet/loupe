@@ -81,8 +81,30 @@ impl Index {
   pub fn nodes(&self) -> Nodes {
     Nodes {
       index: self,
-      stack: vec![self.root],
+      stack: vec![(None, self.root)],
     }
+  }
+
+  pub fn edges(
+    &self,
+  ) -> impl Iterator<Item = ((Option<u8>, &Node256), (Option<u8>, &Node256))> + '_ {
+    self.nodes().flat_map(move |(parent_key, parent_ptr)| {
+      let parent_node = self.get_node(parent_ptr);
+      parent_node
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(move |(child_key, &child_ptr)| {
+          if child_ptr.is_null() {
+            None
+          } else {
+            Some((
+              (parent_key, parent_node),
+              (Some(child_key as u8), self.get_node(child_ptr)),
+            ))
+          }
+        })
+    })
   }
 
   pub fn query(&self, _query: &str) -> u32 {
@@ -100,22 +122,29 @@ impl Index {
 
 pub struct Nodes<'a> {
   index: &'a Index,
-  stack: Vec<*mut Node256>,
+  stack: Vec<(Option<u8>, *const Node256)>,
 }
 
 impl<'a> Iterator for Nodes<'a> {
-  type Item = &'a Node256;
+  type Item = (Option<u8>, &'a Node256);
 
-  fn next(&mut self) -> Option<&'a Node256> {
-    let current_ptr = self.stack.pop()?;
+  fn next(&mut self) -> Option<(Option<u8>, &'a Node256)> {
+    let (key, current_ptr) = self.stack.pop()?;
     let current_node = self.index.get_node(current_ptr);
     self.stack.extend(
       current_node
         .children
         .iter()
-        .filter(|&child| !child.is_null())
+        .enumerate()
+        .filter_map(|(key, &child_ptr)| {
+          if child_ptr.is_null() {
+            None
+          } else {
+            Some((Some(key as u8), child_ptr as *const Node256))
+          }
+        })
         .rev(),
     );
-    Some(current_node)
+    Some((key, current_node))
   }
 }
