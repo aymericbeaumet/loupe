@@ -78,11 +78,44 @@ impl Index {
     }
   }
 
+  pub fn nodes(&self) -> Nodes {
+    Nodes {
+      index: self,
+      stack: vec![self.root],
+    }
+  }
+
   pub fn query(&self, _query: &str) -> u32 {
     0
   }
 
+  fn get_node<T>(&self, ptr: *const T) -> &T {
+    unsafe { &*ptr }
+  }
+
   fn get_node_mut<T>(&mut self, ptr: *mut T) -> &mut T {
     unsafe { &mut *ptr }
+  }
+}
+
+pub struct Nodes<'a> {
+  index: &'a Index,
+  stack: Vec<*mut Node256>,
+}
+
+impl<'a> Iterator for Nodes<'a> {
+  type Item = &'a Node256;
+
+  fn next(&mut self) -> Option<&'a Node256> {
+    let current_ptr = self.stack.pop()?;
+    let current_node = self.index.get_node(current_ptr);
+    self.stack.extend(
+      current_node
+        .children
+        .iter()
+        .filter(|&child| !child.is_null())
+        .rev(),
+    );
+    Some(current_node)
   }
 }

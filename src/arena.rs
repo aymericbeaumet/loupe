@@ -1,3 +1,4 @@
+use log::trace;
 use memmap::{MmapMut, MmapOptions};
 use std::marker::PhantomData;
 
@@ -23,7 +24,7 @@ impl<T> Arena<T> {
     if (self.offset + self.t_size) as usize >= self.mmap.len() {
       panic!("OOM")
     }
-    println!("[trace] alloc:offset={}", self.offset);
+    trace!("alloc offset={}", self.offset);
     let ptr = unsafe { self.mmap.as_mut_ptr().offset(self.offset) } as *mut _ as *mut T;
     self.offset += self.t_size;
     ptr

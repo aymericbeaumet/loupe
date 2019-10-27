@@ -26,6 +26,19 @@ fn add_records(
   ""
 }
 
+#[get("/debug/dot", format = "json")]
+fn dot(index: State<Arc<Mutex<Index>>>) -> String {
+  let index = index.lock().unwrap();
+  let mut output = vec!["digraph index {".to_owned()];
+  // TODO: what we want here are vertices, not nodes
+  for (i, _node) in index.nodes().enumerate() {
+    output.push(format!("  \"{}\"", i));
+  }
+  output.push("}".to_owned());
+  output.push("".to_owned());
+  output.join("\n")
+}
+
 pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
   let index = Arc::new(Mutex::new(index));
   let db = DB::open_default("records.rocksdb")?;
@@ -44,7 +57,7 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
   rocket::custom(config)
     .manage(db)
     .manage(index)
-    .mount("/", routes![add_records])
+    .mount("/", routes![add_records, dot])
     .launch();
 
   Ok(())
