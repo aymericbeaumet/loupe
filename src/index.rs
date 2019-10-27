@@ -2,6 +2,7 @@ use crate::arena::Arena;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use unicode_segmentation::UnicodeSegmentation;
 
 fn default_id() -> String {
   uuid::Uuid::new_v4().to_string()
@@ -51,8 +52,20 @@ impl Index {
   }
 
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
+    let bytes = bytes; // TODO: store in shared memory
+    let record: Record = serde_json::from_slice(bytes).unwrap();
+    for value in record.attributes.values() {
+      if let serde_json::Value::String(value) = value {
+        self.add_node(value);
+      }
+    }
+  }
+
+  pub fn add_node(&mut self, key: &str) {
     let root = self.get_root_mut();
-    root.foobar = 42;
+    for word in key.unicode_words() {
+      println!("{}", word);
+    }
   }
 
   pub fn query(&self, query: &str) -> u32 {

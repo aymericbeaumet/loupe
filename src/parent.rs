@@ -3,27 +3,38 @@ use rocket::config::{Config, Environment};
 use rocket::State;
 use rocket_contrib::json::Json;
 use rocksdb::{WriteBatch, DB};
+use std::sync::{Arc, Mutex};
 
 #[post("/records", format = "json", data = "<records>")]
-fn add_records(db: State<DB>, records: Json<Vec<Record>>) -> &'static str {
+fn add_records(
+  db: State<DB>,
+  index: State<Arc<Mutex<Index>>>,
+  records: Json<Vec<Record>>,
+) -> &'static str {
   let mut batch = WriteBatch::default();
   for record in records.into_inner() {
-    batch
-      .put(
-        record.id.as_bytes(),
-        serde_json::to_string(&record).unwrap(),
-      )
-      .unwrap();
+    let as_string = serde_json::to_string(&record).unwrap();
+    let as_bytes = as_string.as_bytes();
+    batch.put(record.id.as_bytes(), as_bytes).unwrap();
+    {
+      let mut index = index.lock().unwrap();
+      index.add_record_slice(as_bytes);
+    }
   }
   db.write(batch).unwrap();
+  // TODO: add record to the index as batch after they have been written to disk
   ""
 }
 
-pub fn main(mut index: Index) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
+  let index = Arc::new(Mutex::new(index));
   let db = DB::open_default("records.rocksdb")?;
 
-  for (_, record) in db.iterator(rocksdb::IteratorMode::Start) {
-    index.add_record_slice(&record);
+  {
+    let mut index = index.lock().unwrap();
+    for (_, record) in db.iterator(rocksdb::IteratorMode::Start) {
+      index.add_record_slice(&record);
+    }
   }
 
   let config = Config::build(Environment::Development)
@@ -32,6 +43,7 @@ pub fn main(mut index: Index) -> Result<(), Box<dyn std::error::Error>> {
     .finalize()?;
   rocket::custom(config)
     .manage(db)
+    .manage(index)
     .mount("/", routes![add_records])
     .launch();
 
