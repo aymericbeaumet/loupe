@@ -81,14 +81,12 @@ impl Index {
   pub fn nodes(&self) -> Nodes {
     Nodes {
       index: self,
-      stack: vec![(None, self.root)],
+      stack: vec![(vec![], self.root)],
     }
   }
 
-  pub fn edges(
-    &self,
-  ) -> impl Iterator<Item = ((Option<u8>, &Node256), (Option<u8>, &Node256))> + '_ {
-    self.nodes().flat_map(move |(parent_key, parent_ptr)| {
+  pub fn edges(&self) -> impl Iterator<Item = ((Vec<u8>, &Node256), (Vec<u8>, &Node256))> + '_ {
+    self.nodes().flat_map(move |(parent_path, parent_ptr)| {
       let parent_node = self.get_node(parent_ptr);
       parent_node
         .children
@@ -98,9 +96,11 @@ impl Index {
           if child_ptr.is_null() {
             None
           } else {
+            let mut child_path = parent_path.clone();
+            child_path.push(child_key as u8);
             Some((
-              (parent_key, parent_node),
-              (Some(child_key as u8), self.get_node(child_ptr)),
+              (parent_path.clone(), parent_node),
+              (child_path, self.get_node(child_ptr)),
             ))
           }
         })
@@ -122,14 +122,14 @@ impl Index {
 
 pub struct Nodes<'a> {
   index: &'a Index,
-  stack: Vec<(Option<u8>, *const Node256)>,
+  stack: Vec<(Vec<u8>, *const Node256)>,
 }
 
 impl<'a> Iterator for Nodes<'a> {
-  type Item = (Option<u8>, &'a Node256);
+  type Item = (Vec<u8>, &'a Node256);
 
-  fn next(&mut self) -> Option<(Option<u8>, &'a Node256)> {
-    let (key, current_ptr) = self.stack.pop()?;
+  fn next(&mut self) -> Option<(Vec<u8>, &'a Node256)> {
+    let (path, current_ptr) = self.stack.pop()?;
     let current_node = self.index.get_node(current_ptr);
     self.stack.extend(
       current_node
@@ -140,11 +140,13 @@ impl<'a> Iterator for Nodes<'a> {
           if child_ptr.is_null() {
             None
           } else {
-            Some((Some(key as u8), child_ptr as *const Node256))
+            let mut child_path = path.clone();
+            child_path.push(key as u8);
+            Some((child_path, child_ptr as *const Node256))
           }
         })
         .rev(),
     );
-    Some((key, current_node))
+    Some((path, current_node))
   }
 }
