@@ -20,6 +20,10 @@ impl<T> Arena<T> {
   }
 
   pub fn alloc(&mut self) -> *mut T {
+    if (self.offset + self.t_size) as usize >= self.mmap.len() {
+      panic!("OOM")
+    }
+    println!("[trace] alloc:offset={}", self.offset);
     let ptr = unsafe { self.mmap.as_mut_ptr().offset(self.offset) } as *mut _ as *mut T;
     self.offset += self.t_size;
     ptr

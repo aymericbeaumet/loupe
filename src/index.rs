@@ -30,7 +30,7 @@ pub struct Record {
 }
 
 pub struct Node256 {
-  pub foobar: u32,
+  children: [*mut Node256; 256],
 }
 
 pub struct Index {
@@ -44,7 +44,7 @@ unsafe impl Sync for Index {}
 impl Index {
   pub fn new() -> Self {
     let mut index = Self {
-      arena: Arena::new(65536),
+      arena: Arena::new(1_000_000),
       root: std::ptr::null_mut(),
     };
     index.root = index.arena.alloc();
@@ -52,31 +52,37 @@ impl Index {
   }
 
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
-    let bytes = bytes; // TODO: store in shared memory
     let record: Record = serde_json::from_slice(bytes).unwrap();
     for value in record.attributes.values() {
       if let serde_json::Value::String(value) = value {
-        self.add_node(value);
+        self.insert(value);
       }
     }
   }
 
-  pub fn add_node(&mut self, key: &str) {
-    let root = self.get_root_mut();
-    for word in key.unicode_words() {
-      println!("{}", word);
+  pub fn insert(&mut self, key: &str) {
+    let mut current_ptr = self.root;
+    for w in key.unicode_words() {
+      for c in w.chars() {
+        for &b in (c as u32).to_be_bytes().iter() {
+          let child_ptr = self.get_node_mut(current_ptr).children[b as usize];
+          if !child_ptr.is_null() {
+            current_ptr = child_ptr;
+          } else {
+            let child_ptr = self.arena.alloc();
+            self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
+            current_ptr = child_ptr;
+          }
+        }
+      }
     }
   }
 
-  pub fn query(&self, query: &str) -> u32 {
-    self.get_root().foobar
+  pub fn query(&self, _query: &str) -> u32 {
+    0
   }
 
-  fn get_root(&self) -> &Node256 {
-    unsafe { &*self.root }
-  }
-
-  fn get_root_mut(&mut self) -> &mut Node256 {
-    unsafe { &mut *self.root }
+  fn get_node_mut<T>(&mut self, ptr: *mut T) -> &mut T {
+    unsafe { &mut *ptr }
   }
 }
