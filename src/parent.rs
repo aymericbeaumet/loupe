@@ -1,4 +1,5 @@
 use crate::index::{Index, Record};
+use byteorder::{BigEndian, ReadBytesExt};
 use rocket::config::{Config, Environment};
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -68,8 +69,13 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
 
 fn format_path(path: &[u8]) -> String {
   path
-    .iter()
-    .map(|p| format!("0x{:02X}", p))
-    .collect::<Vec<String>>()
-    .join(":")
+    .chunks(std::mem::size_of::<u32>())
+    .map(|mut char_slice| match char_slice.len() {
+      4 => std::char::from_u32(char_slice.read_u32::<BigEndian>().unwrap())
+        .unwrap()
+        .to_string(),
+      _ => format!("{:02X?}", char_slice),
+    })
+    .collect::<Vec<_>>()
+    .join("")
 }
