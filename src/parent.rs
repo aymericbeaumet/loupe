@@ -73,7 +73,7 @@ fn format_path(path: &[u8]) -> String {
     Ok(s) => s.to_owned(),
     Err(error) => format!(
       "{}{:02X?}",
-      format_path(&path[..error.valid_up_to()]),
+      unsafe { std::str::from_utf8_unchecked(&path[..error.valid_up_to()]) },
       &path[error.valid_up_to()..]
     ),
   }
