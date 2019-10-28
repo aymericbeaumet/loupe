@@ -28,14 +28,16 @@ fn add_records(
 
 #[get("/debug/dot", format = "json")]
 fn dot(index: State<Arc<Mutex<Index>>>) -> String {
-  let index = index.lock().unwrap();
   let mut output = vec!["digraph index {".to_owned()];
-  for ((parent_path, _), (child_path, _)) in index.edges() {
-    output.push(format!(
-      "  \"{}\" -> \"{}\"",
-      format_path(&parent_path),
-      format_path(&child_path),
-    ));
+  {
+    let index = index.lock().unwrap();
+    for ((parent_path, _), (child_path, _)) in index.edges() {
+      output.push(format!(
+        "  \"{}\" -> \"{}\"",
+        format_path(&parent_path),
+        format_path(&child_path),
+      ));
+    }
   }
   output.push("}".to_owned());
   output.push("".to_owned());
