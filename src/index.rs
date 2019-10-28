@@ -1,4 +1,4 @@
-use crate::arena::TypedArena;
+use crate::arena::{Arena, TypedArena};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -31,11 +31,18 @@ pub struct Record {
 
 pub struct Node256 {
   children: [*mut Node256; 256],
+  leaf: *mut Leaf256,
+}
+
+pub struct Leaf256 {
+  records: [*const u8; 2 * 128],
 }
 
 pub struct Index {
-  arena: TypedArena<Node256>,
-  root: *mut Node256,
+  root_ptr: *mut Node256,
+  nodes: TypedArena<Node256>,
+  leaves: TypedArena<Leaf256>,
+  records: Arena,
 }
 
 unsafe impl Send for Index {}
@@ -44,33 +51,50 @@ unsafe impl Sync for Index {}
 impl Index {
   pub fn new() -> Self {
     let mut index = Self {
-      arena: TypedArena::new(100_000_000),
-      root: std::ptr::null_mut(),
+      root_ptr: std::ptr::null_mut(),
+      nodes: TypedArena::new(100_000_000),
+      leaves: TypedArena::new(100_000_000),
+      records: Arena::new(100_000_000),
     };
-    index.root = index.arena.alloc().unwrap();
+    index.root_ptr = index.nodes.alloc().unwrap();
     index
   }
 
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
+    let stored = self.records.store(bytes).unwrap();
     let record: Record = serde_json::from_slice(bytes).unwrap();
     for value in record.attributes.values() {
       if let serde_json::Value::String(value) = value {
-        self.insert(value);
+        self.insert(value, stored);
       }
     }
   }
 
-  pub fn insert(&mut self, key: &str) {
+  pub fn insert(&mut self, key: &str, (record_ptr_start, record_ptr_end): (*const u8, *const u8)) {
     for w in key.unicode_words() {
-      let mut current_ptr = self.root;
+      let mut current_ptr = self.root_ptr;
       for b in w.bytes() {
-        let child_ptr = self.get_node_mut(current_ptr).children[b as usize];
+        let child_ptr = self.nodes.at_mut(current_ptr).children[b as usize];
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
         } else {
-          let child_ptr = self.arena.alloc().unwrap();
-          self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
+          let child_ptr = self.nodes.alloc().unwrap();
+          self.nodes.at_mut(current_ptr).children[b as usize] = child_ptr;
           current_ptr = child_ptr;
+        }
+      }
+      let mut current_node = self.nodes.at_mut(current_ptr);
+      if current_node.leaf.is_null() {
+        current_node.leaf = self.leaves.alloc().unwrap();
+      }
+      let leaf = self.leaves.at_mut(current_node.leaf);
+      for i in (0..leaf.records.len()).step_by(2) {
+        if leaf.records[i] == record_ptr_start {
+          break;
+        }
+        if leaf.records[i].is_null() {
+          leaf.records[i] = record_ptr_start;
+          leaf.records[i + 1] = record_ptr_end;
         }
       }
     }
@@ -79,13 +103,13 @@ impl Index {
   pub fn nodes(&self) -> Nodes {
     Nodes {
       index: self,
-      stack: vec![(vec![], self.root)],
+      stack: vec![(vec![], self.root_ptr)],
     }
   }
 
   pub fn edges(&self) -> impl Iterator<Item = ((Vec<u8>, &Node256), (Vec<u8>, &Node256))> + '_ {
     self.nodes().flat_map(move |(parent_path, parent_ptr)| {
-      let parent_node = self.get_node(parent_ptr);
+      let parent_node = self.nodes.at(parent_ptr);
       parent_node
         .children
         .iter()
@@ -98,7 +122,7 @@ impl Index {
             child_path.push(child_key as u8);
             Some((
               (parent_path.clone(), parent_node),
-              (child_path, self.get_node(child_ptr)),
+              (child_path, self.nodes.at(child_ptr)),
             ))
           }
         })
@@ -107,14 +131,6 @@ impl Index {
 
   pub fn query(&self, _query: &str) -> u32 {
     0
-  }
-
-  fn get_node<T>(&self, ptr: *const T) -> &T {
-    unsafe { &*ptr }
-  }
-
-  fn get_node_mut<T>(&mut self, ptr: *mut T) -> &mut T {
-    unsafe { &mut *ptr }
   }
 }
 
@@ -128,7 +144,7 @@ impl<'a> Iterator for Nodes<'a> {
 
   fn next(&mut self) -> Option<(Vec<u8>, &'a Node256)> {
     let (path, current_ptr) = self.stack.pop()?;
-    let current_node = self.index.get_node(current_ptr);
+    let current_node = self.index.nodes.at(current_ptr);
     self.stack.extend(
       current_node
         .children

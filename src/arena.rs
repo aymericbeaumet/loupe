@@ -17,11 +17,26 @@ impl Arena {
   }
 
   pub fn alloc(&self, size: isize) -> Result<*mut u8, ArenaError> {
-    let offset = self.offset.fetch_add(size, Ordering::SeqCst);
-    if (offset + size) as usize >= self.mmap.len() {
+    let offset = self.advance_offset(size)?;
+    Ok(unsafe { self.mmap.as_ptr().offset(offset) as *mut u8 })
+  }
+
+  pub fn store(&mut self, bytes: &[u8]) -> Result<(*const u8, *const u8), ArenaError> {
+    let len = bytes.len() as isize;
+    let offset = self.advance_offset(len)?;
+    self.mmap[(offset as usize)..(offset + len) as usize].copy_from_slice(bytes);
+    Ok((
+      unsafe { self.mmap.as_ptr().offset(offset) as *const u8 },
+      unsafe { self.mmap.as_ptr().offset(offset + len) as *const u8 },
+    ))
+  }
+
+  fn advance_offset(&self, step: isize) -> Result<isize, ArenaError> {
+    let offset = self.offset.fetch_add(step, Ordering::SeqCst);
+    if (offset + step) as usize >= self.mmap.len() {
       Err("Out of memory".into())
     } else {
-      Ok(unsafe { self.mmap.as_ptr().offset(offset) as *mut u8 })
+      Ok(offset)
     }
   }
 }
@@ -44,6 +59,14 @@ impl<T> TypedArena<T> {
 
   pub fn alloc(&self) -> Result<*mut T, ArenaError> {
     Ok(self.arena.alloc(self.t_size)? as *mut _ as *mut T)
+  }
+
+  pub fn at(&self, ptr: *const T) -> &T {
+    unsafe { &*ptr }
+  }
+
+  pub fn at_mut(&mut self, ptr: *mut T) -> &mut T {
+    unsafe { &mut *ptr }
   }
 }
 
