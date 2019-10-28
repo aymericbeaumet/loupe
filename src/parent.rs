@@ -31,12 +31,14 @@ fn dot(index: State<Arc<Mutex<Index>>>) -> String {
   let mut output = vec!["digraph index {".to_owned()];
   {
     let index = index.lock().unwrap();
-    for ((parent_path, _), (child_path, _)) in index.edges() {
-      output.push(format!(
-        "  \"{}\" -> \"{}\"",
-        format_path(&parent_path),
-        format_path(&child_path),
-      ));
+    for ((parent_path, _), (child_path, child_node)) in index.edges() {
+      let parent_path = format_path(&parent_path);
+      let child_path = format_path(&child_path);
+      output.push(format!("  \"{}\" -> \"{}\"", parent_path, child_path));
+      for record in child_node.records() {
+        let record = str::replace(&record.to_string(), "\"", "'");
+        output.push(format!("  \"{}\" -> \"{}\"", child_path, record));
+      }
     }
   }
   output.push("}".to_owned());

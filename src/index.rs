@@ -29,9 +29,32 @@ pub struct Record {
   pub attributes: HashMap<String, serde_json::Value>,
 }
 
+impl ToString for Record {
+  fn to_string(&self) -> String {
+    serde_json::to_string(self).unwrap()
+  }
+}
+
 pub struct Node256 {
   children: [*mut Node256; 256],
   leaf: *mut Leaf256,
+}
+
+impl Node256 {
+  pub fn records(&self) -> impl Iterator<Item = Record> + '_ {
+    let chunks = if self.leaf.is_null() {
+      [].chunks_exact(2)
+    } else {
+      (unsafe { &*self.leaf }).records.chunks_exact(2)
+    };
+    chunks.take_while(|chunk| !chunk[0].is_null()).map(|chunk| {
+      let ptr_start = chunk[0];
+      let ptr_end = chunk[1];
+      let bytes =
+        unsafe { std::slice::from_raw_parts(ptr_start, ptr_end as usize - ptr_start as usize) };
+      serde_json::from_slice(bytes).unwrap()
+    })
+  }
 }
 
 pub struct Leaf256 {
@@ -95,6 +118,7 @@ impl Index {
         if leaf.records[i].is_null() {
           leaf.records[i] = record_ptr_start;
           leaf.records[i + 1] = record_ptr_end;
+          break;
         }
       }
     }
