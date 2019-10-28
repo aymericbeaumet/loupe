@@ -33,16 +33,8 @@ fn dot(index: State<Arc<Mutex<Index>>>) -> String {
   for ((parent_path, _), (child_path, _)) in index.edges() {
     output.push(format!(
       "  \"{}\" -> \"{}\"",
-      parent_path
-        .iter()
-        .map(|p| format!("0x{:02X}", p))
-        .collect::<Vec<String>>()
-        .join(":"),
-      child_path
-        .iter()
-        .map(|p| format!("0x{:02X}", p))
-        .collect::<Vec<String>>()
-        .join(":"),
+      format_path(&parent_path),
+      format_path(&child_path),
     ));
   }
   output.push("}".to_owned());
@@ -72,4 +64,12 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
     .launch();
 
   Ok(())
+}
+
+fn format_path(path: &[u8]) -> String {
+  path
+    .iter()
+    .map(|p| format!("0x{:02X}", p))
+    .collect::<Vec<String>>()
+    .join(":")
 }
