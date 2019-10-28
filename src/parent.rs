@@ -68,14 +68,14 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn format_path(path: &[u8]) -> String {
-  path
-    .chunks(std::mem::size_of::<u32>())
-    .map(|mut char_slice| match char_slice.len() {
-      4 => std::char::from_u32(char_slice.read_u32::<BigEndian>().unwrap())
-        .unwrap()
-        .to_string(),
-      _ => format!("{:02X?}", char_slice),
-    })
-    .collect::<Vec<_>>()
-    .join("")
+  let chunks = path.chunks_exact(std::mem::size_of::<u32>());
+  let remainder = chunks.remainder();
+  let chars = chunks
+    .map(|mut chunk| std::char::from_u32(chunk.read_u32::<BigEndian>().unwrap()).unwrap())
+    .collect::<String>();
+  if remainder.is_empty() {
+    chars
+  } else {
+    format!("{}{:02X?}", chars, remainder)
+  }
 }
