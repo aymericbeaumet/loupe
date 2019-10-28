@@ -44,7 +44,7 @@ unsafe impl Sync for Index {}
 impl Index {
   pub fn new() -> Self {
     let mut index = Self {
-      arena: Arena::new(1_000_000),
+      arena: Arena::new(100_000_000),
       root: std::ptr::null_mut(),
     };
     index.root = index.arena.alloc();
