@@ -34,7 +34,7 @@ pub struct Node256 {
 }
 
 pub struct Index {
-  arena: Arena<Node256>,
+  arena: Arena,
   root: *mut Node256,
 }
 
@@ -47,7 +47,7 @@ impl Index {
       arena: Arena::new(100_000_000),
       root: std::ptr::null_mut(),
     };
-    index.root = index.arena.alloc();
+    index.root = index.arena.alloc_type().unwrap();
     index
   }
 
@@ -68,7 +68,7 @@ impl Index {
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
         } else {
-          let child_ptr = self.arena.alloc();
+          let child_ptr = self.arena.alloc_type().unwrap();
           self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
           current_ptr = child_ptr;
         }
