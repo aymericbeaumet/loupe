@@ -1,4 +1,5 @@
 use memmap::{MmapMut, MmapOptions};
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicIsize, Ordering};
 
 #[derive(Debug)]
@@ -23,9 +24,26 @@ impl Arena {
       Ok(unsafe { self.mmap.as_ptr().offset(offset) as *mut u8 })
     }
   }
+}
 
-  pub fn alloc_type<T>(&self) -> Result<*mut T, ArenaError> {
-    Ok(self.alloc(std::mem::size_of::<T>() as isize)? as *mut _ as *mut T)
+#[derive(Debug)]
+pub struct TypedArena<T> {
+  arena: Arena,
+  t: PhantomData<T>,
+  t_size: isize,
+}
+
+impl<T> TypedArena<T> {
+  pub fn new(size: usize) -> Self {
+    Self {
+      arena: Arena::new(size),
+      t: PhantomData,
+      t_size: std::mem::size_of::<T>() as isize,
+    }
+  }
+
+  pub fn alloc(&self) -> Result<*mut T, ArenaError> {
+    Ok(self.arena.alloc(self.t_size)? as *mut _ as *mut T)
   }
 }
 

@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::TypedArena;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -34,7 +34,7 @@ pub struct Node256 {
 }
 
 pub struct Index {
-  arena: Arena,
+  arena: TypedArena<Node256>,
   root: *mut Node256,
 }
 
@@ -44,10 +44,10 @@ unsafe impl Sync for Index {}
 impl Index {
   pub fn new() -> Self {
     let mut index = Self {
-      arena: Arena::new(100_000_000),
+      arena: TypedArena::new(100_000_000),
       root: std::ptr::null_mut(),
     };
-    index.root = index.arena.alloc_type().unwrap();
+    index.root = index.arena.alloc().unwrap();
     index
   }
 
@@ -68,7 +68,7 @@ impl Index {
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
         } else {
-          let child_ptr = self.arena.alloc_type().unwrap();
+          let child_ptr = self.arena.alloc().unwrap();
           self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
           current_ptr = child_ptr;
         }
