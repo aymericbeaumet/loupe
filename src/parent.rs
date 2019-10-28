@@ -69,7 +69,7 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn format_path(path: &[u8]) -> String {
-  match std::str::from_utf8(&path) {
+  match std::str::from_utf8(path) {
     Ok(s) => s.to_owned(),
     Err(error) => format!(
       "{}{:02X?}",
