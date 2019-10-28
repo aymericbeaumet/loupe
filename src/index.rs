@@ -61,8 +61,8 @@ impl Index {
   }
 
   pub fn insert(&mut self, key: &str) {
-    let mut current_ptr = self.root;
     for w in key.unicode_words() {
+      let mut current_ptr = self.root;
       for c in w.chars() {
         for &b in (c as u32).to_be_bytes().iter() {
           let child_ptr = self.get_node_mut(current_ptr).children[b as usize];
