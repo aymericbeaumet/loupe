@@ -63,16 +63,14 @@ impl Index {
   pub fn insert(&mut self, key: &str) {
     for w in key.unicode_words() {
       let mut current_ptr = self.root;
-      for c in w.chars() {
-        for &b in (c as u32).to_be_bytes().iter() {
-          let child_ptr = self.get_node_mut(current_ptr).children[b as usize];
-          if !child_ptr.is_null() {
-            current_ptr = child_ptr;
-          } else {
-            let child_ptr = self.arena.alloc();
-            self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
-            current_ptr = child_ptr;
-          }
+      for b in w.bytes() {
+        let child_ptr = self.get_node_mut(current_ptr).children[b as usize];
+        if !child_ptr.is_null() {
+          current_ptr = child_ptr;
+        } else {
+          let child_ptr = self.arena.alloc();
+          self.get_node_mut(current_ptr).children[b as usize] = child_ptr;
+          current_ptr = child_ptr;
         }
       }
     }

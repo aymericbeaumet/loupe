@@ -1,5 +1,4 @@
 use crate::index::{Index, Record};
-use byteorder::{BigEndian, ReadBytesExt};
 use rocket::config::{Config, Environment};
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -68,14 +67,12 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn format_path(path: &[u8]) -> String {
-  let chunks = path.chunks_exact(std::mem::size_of::<u32>());
-  let remainder = chunks.remainder();
-  let chars = chunks
-    .map(|mut chunk| std::char::from_u32(chunk.read_u32::<BigEndian>().unwrap()).unwrap())
-    .collect::<String>();
-  if remainder.is_empty() {
-    chars
-  } else {
-    format!("{}{:02X?}", chars, remainder)
+  match std::str::from_utf8(&path) {
+    Ok(s) => s.to_owned(),
+    Err(error) => format!(
+      "{}{:02X?}",
+      format_path(&path[..error.valid_up_to()]),
+      &path[error.valid_up_to()..]
+    ),
   }
 }
