@@ -9,14 +9,7 @@ pub struct Node256 {
 }
 
 impl Node256 {
-  pub fn find(&self, keys: &[u8]) -> Option<&Self> {
-    let mut node = self;
-    for &key in keys {
-      node = node.child(key)?;
-    }
-    Some(node)
-  }
-
+  // Find a child of the current node
   pub fn child(&self, key: u8) -> Option<&Self> {
     let child = self.children[key as usize];
     if !child.is_null() {
@@ -24,6 +17,15 @@ impl Node256 {
     } else {
       None
     }
+  }
+
+  // Find a child starting from the current node
+  pub fn child_deep(&self, keys: &[u8]) -> Option<&Self> {
+    let mut node = self;
+    for &key in keys {
+      node = node.child(key)?;
+    }
+    Some(node)
   }
 
   // Return an iterator for the children of the current node
@@ -163,7 +165,7 @@ impl Index {
   pub fn query(&self, query: &str) -> impl Iterator<Item = Record> {
     let root_node = unsafe { &*self.root_ptr };
     root_node
-      .find(query.as_bytes())
+      .child_deep(query.as_bytes())
       .into_iter()
       .flat_map(|node| node.records_deep())
       .unique_by(|record| record.id)
