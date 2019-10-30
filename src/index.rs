@@ -162,11 +162,11 @@ impl Index {
 
   pub fn query(&self, query: &str) -> impl Iterator<Item = Record> {
     let root_node = unsafe { &*self.root_ptr };
-    let query = query.as_bytes();
-    match root_node.find(query) {
-      Some(node) => node.records_deep().unique_by(|record| record.id),
-      None => unimplemented!("todo"),
-    }
+    root_node
+      .find(query.as_bytes())
+      .into_iter()
+      .flat_map(|node| node.records_deep())
+      .unique_by(|record| record.id)
   }
 }
 
