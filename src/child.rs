@@ -1,4 +1,4 @@
-use crate::index::Index;
+use crate::index::{Index, Record};
 use rocket::config::{Config, Environment};
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -10,8 +10,12 @@ struct Body {
 }
 
 #[post("/", format = "json", data = "<body>")]
-fn query(index: State<Index>, body: Json<Body>) -> String {
-  index.query(&body.query).to_string()
+fn query(index: State<Index>, body: Json<Body>) -> Json<Vec<Record>> {
+  let records: Vec<_> = match index.query(&body.query) {
+    Some(records) => records.collect(),
+    None => vec![],
+  };
+  Json(records)
 }
 
 pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {

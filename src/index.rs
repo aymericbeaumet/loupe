@@ -1,4 +1,5 @@
 use crate::arena::{Arena, TypedArena};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,6 +42,45 @@ pub struct Node256 {
 }
 
 impl Node256 {
+  pub fn find(&self, keys: &[u8]) -> Option<&Self> {
+    let mut node = self;
+    for &key in keys {
+      node = node.child(key)?;
+    }
+    Some(node)
+  }
+
+  pub fn child(&self, key: u8) -> Option<&Self> {
+    let child = self.children[key as usize];
+    if !child.is_null() {
+      Some(unsafe { &*child })
+    } else {
+      None
+    }
+  }
+
+  pub fn children(&self) -> impl Iterator<Item = (u8, &Self)> + '_ {
+    self
+      .children
+      .iter()
+      .enumerate()
+      .filter_map(|(key, &child_ptr)| {
+        if child_ptr.is_null() {
+          None
+        } else {
+          Some((key as u8, unsafe { &*child_ptr }))
+        }
+      })
+  }
+
+  pub fn children_deep(&self) -> Box<dyn Iterator<Item = (u8, &Self)> + '_> {
+    Box::new(
+      self
+        .children()
+        .flat_map(|(key, child)| std::iter::once((key, child)).chain(child.children_deep())),
+    )
+  }
+
   pub fn records(&self) -> impl Iterator<Item = Record> + '_ {
     let chunks = if self.leaf.is_null() {
       [].chunks_exact(2)
@@ -54,6 +94,12 @@ impl Node256 {
         unsafe { std::slice::from_raw_parts(ptr_start, ptr_end as usize - ptr_start as usize) };
       serde_json::from_slice(bytes).unwrap()
     })
+  }
+
+  pub fn records_deep(&self) -> impl Iterator<Item = Record> + '_ {
+    self
+      .children_deep()
+      .flat_map(|(_key, child)| child.records())
   }
 }
 
@@ -132,29 +178,20 @@ impl Index {
   }
 
   pub fn edges(&self) -> impl Iterator<Item = ((Vec<u8>, &Node256), (Vec<u8>, &Node256))> + '_ {
-    self.nodes().flat_map(move |(parent_path, parent_ptr)| {
-      let parent_node = self.nodes.at(parent_ptr);
-      parent_node
-        .children
-        .iter()
-        .enumerate()
-        .filter_map(move |(child_key, &child_ptr)| {
-          if child_ptr.is_null() {
-            None
-          } else {
-            let mut child_path = parent_path.clone();
-            child_path.push(child_key as u8);
-            Some((
-              (parent_path.clone(), parent_node),
-              (child_path, self.nodes.at(child_ptr)),
-            ))
-          }
-        })
+    self.nodes().flat_map(move |(parent_path, parent_node)| {
+      parent_node.children().map(move |(child_key, child_node)| {
+        let mut child_path = parent_path.clone();
+        child_path.push(child_key);
+        ((parent_path.clone(), parent_node), (child_path, child_node))
+      })
     })
   }
 
-  pub fn query(&self, _query: &str) -> u32 {
-    0
+  pub fn query(&self, query: &str) -> Option<impl Iterator<Item = Record>> {
+    let root_node = unsafe { &*self.root_ptr };
+    root_node
+      .find(query.as_bytes())
+      .map(|node| node.records_deep().unique_by(|r| r.id.clone()))
   }
 }
 
