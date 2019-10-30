@@ -1,4 +1,5 @@
-use crate::index::{Index, Record};
+use crate::index::Index;
+use crate::record::Record;
 use rocket::config::{Config, Environment};
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -15,7 +16,7 @@ fn add_records(
   for record in records.into_inner() {
     let as_string = serde_json::to_string(&record).unwrap();
     let as_bytes = as_string.as_bytes();
-    batch.put(record.id.as_bytes(), as_bytes).unwrap();
+    batch.put(record.id.to_ne_bytes(), as_bytes).unwrap();
     {
       let mut index = index.lock().unwrap();
       index.add_record_slice(as_bytes);

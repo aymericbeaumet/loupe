@@ -7,6 +7,7 @@ mod arena;
 mod child;
 mod index;
 mod parent;
+mod record;
 
 use index::Index;
 use nix::unistd::{fork, ForkResult};

@@ -1,40 +1,7 @@
 use crate::arena::{Arena, TypedArena};
+use crate::record::Record;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use unicode_segmentation::UnicodeSegmentation;
-
-fn default_id() -> String {
-  uuid::Uuid::new_v4().to_string()
-}
-
-fn default_now() -> u64 {
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .expect("Time went backwards")
-    .as_millis() as u64
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Record {
-  #[serde(default = "default_id")]
-  pub id: String,
-  #[serde(default)]
-  pub tags: Vec<String>,
-  #[serde(default = "default_now")]
-  pub created_at: u64,
-  #[serde(default = "default_now")]
-  pub updated_at: u64,
-  #[serde(flatten)]
-  pub attributes: HashMap<String, serde_json::Value>,
-}
-
-impl ToString for Record {
-  fn to_string(&self) -> String {
-    serde_json::to_string(self).unwrap()
-  }
-}
 
 pub struct Node256 {
   children: [*mut Node256; 256],
@@ -132,7 +99,7 @@ impl Index {
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
     let stored = self.records.store(bytes).unwrap();
     let record: Record = serde_json::from_slice(bytes).unwrap();
-    for value in record.attributes.values() {
+    for value in record.values() {
       if let serde_json::Value::String(value) = value {
         self.insert(value, stored);
       }
@@ -187,11 +154,13 @@ impl Index {
     })
   }
 
-  pub fn query(&self, query: &str) -> Option<impl Iterator<Item = Record>> {
+  pub fn query(&self, query: &str) -> impl Iterator<Item = Record> {
     let root_node = unsafe { &*self.root_ptr };
-    root_node
-      .find(query.as_bytes())
-      .map(|node| node.records_deep().unique_by(|r| r.id.clone()))
+    let query = query.as_bytes();
+    match root_node.find(query) {
+      Some(node) => node.records_deep().unique_by(|record| record.id),
+      None => unimplemented!("todo"),
+    }
   }
 }
 
