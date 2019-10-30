@@ -27,7 +27,7 @@ impl Node256 {
   }
 
   // Return an iterator for the children of the current node
-  pub fn children(&self) -> impl Iterator<Item = (u8, &Self)> + '_ {
+  pub fn children(&self) -> impl Iterator<Item = (u8, &Self)> {
     self
       .children
       .iter()
@@ -51,7 +51,7 @@ impl Node256 {
   }
 
   // Return an iterator for the records of the current node
-  pub fn records(&self) -> impl Iterator<Item = Record> + '_ {
+  pub fn records(&self) -> impl Iterator<Item = Record> {
     let chunks = if self.leaf.is_null() {
       [].chunks_exact(2)
     } else {
