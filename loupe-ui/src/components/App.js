@@ -1,5 +1,6 @@
 import React from "react";
 import Axios from "axios";
+import TextField from "@material-ui/core/TextField";
 
 class App extends React.Component {
   state = {
@@ -19,8 +20,15 @@ class App extends React.Component {
 
   render() {
     return (
-      <>
-        <input type="text" autoFocus={true} onChange={this.handleChange} />
+      <form autoComplete="off">
+        <TextField
+          id="outlined-basic"
+          label="Search a record"
+          margin="normal"
+          variant="outlined"
+          autoFocus={true}
+          onChange={this.handleChange}
+        />
         <table>
           <tbody>
             {this.state.records.map(record => (
@@ -30,7 +38,7 @@ class App extends React.Component {
             ))}
           </tbody>
         </table>
-      </>
+      </form>
     );
   }
 }
