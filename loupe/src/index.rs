@@ -11,21 +11,13 @@ pub struct Node256 {
 impl Node256 {
   // Find a child of the current node
   pub fn child(&self, key: u8) -> Option<&Self> {
-    let child = self.children[key as usize];
-    if !child.is_null() {
-      Some(unsafe { &*child })
-    } else {
-      None
-    }
+    let child_ptr = self.children[key as usize];
+    unsafe { child_ptr.as_ref() }
   }
 
   // Find a child starting from the current node
   pub fn child_deep(&self, keys: &[u8]) -> Option<&Self> {
-    let mut node = self;
-    for &key in keys {
-      node = node.child(key)?;
-    }
-    Some(node)
+    keys.iter().try_fold(self, |node, &key| node.child(key))
   }
 
   // Return an iterator for the children of the current node
@@ -34,12 +26,8 @@ impl Node256 {
       .children
       .iter()
       .enumerate()
-      .filter_map(|(key, &child_ptr)| {
-        if child_ptr.is_null() {
-          None
-        } else {
-          Some((key as u8, unsafe { &*child_ptr }))
-        }
+      .filter_map(|(key, child_ptr)| {
+        unsafe { child_ptr.as_ref() }.map(|child_node| (key as u8, child_node))
       })
   }
 
@@ -54,18 +42,16 @@ impl Node256 {
 
   // Return an iterator for the records of the current node
   pub fn records(&self) -> impl Iterator<Item = Record> {
-    let chunks = if self.leaf.is_null() {
-      [].chunks_exact(2)
-    } else {
-      (unsafe { &*self.leaf }).records.chunks_exact(2)
-    };
-    chunks.take_while(|chunk| !chunk[0].is_null()).map(|chunk| {
-      let ptr_start = chunk[0];
-      let ptr_end = chunk[1];
-      let bytes =
-        unsafe { std::slice::from_raw_parts(ptr_start, ptr_end as usize - ptr_start as usize) };
-      serde_json::from_slice(bytes).unwrap()
-    })
+    unsafe { self.leaf.as_ref() }
+      .into_iter()
+      .flat_map(|leaf| leaf.records.chunks_exact(2))
+      .map(|chunk| (chunk[0], chunk[1]))
+      .take_while(|(ptr_start, _ptr_end)| !ptr_start.is_null())
+      .map(|(ptr_start, ptr_end)| {
+        let len = ptr_end as usize - ptr_start as usize;
+        let bytes = unsafe { std::slice::from_raw_parts(ptr_start, len) };
+        serde_json::from_slice(bytes).unwrap()
+      })
   }
 
   // Return an iterator for the all the records starting from the current node
@@ -107,17 +93,17 @@ impl Index {
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
     let stored = self.records.store(bytes).unwrap();
     let record: Record = serde_json::from_slice(bytes).unwrap();
-    for value in record.values() {
+    record.values().for_each(|value| {
       if let serde_json::Value::String(value) = value {
         self.insert(value, stored);
       }
-    }
+    })
   }
 
   pub fn insert(&mut self, key: &str, (record_ptr_start, record_ptr_end): (*const u8, *const u8)) {
-    for w in key.unicode_words() {
+    key.unicode_words().for_each(|w| {
       let mut current_ptr = self.root_ptr;
-      for b in w.bytes() {
+      w.bytes().for_each(|b| {
         let child_ptr = self.nodes.at_mut(current_ptr).children[b as usize];
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
@@ -126,7 +112,7 @@ impl Index {
           self.nodes.at_mut(current_ptr).children[b as usize] = child_ptr;
           current_ptr = child_ptr;
         }
-      }
+      });
       let mut current_node = self.nodes.at_mut(current_ptr);
       if current_node.leaf.is_null() {
         current_node.leaf = self.leaves.alloc().unwrap();
@@ -142,7 +128,7 @@ impl Index {
           break;
         }
       }
-    }
+    });
   }
 
   pub fn nodes(&self) -> Nodes {
