@@ -60,14 +60,6 @@ impl<T> TypedArena<T> {
   pub fn alloc(&self) -> Result<*mut T, ArenaError> {
     Ok(self.arena.alloc(self.t_size)? as *mut _ as *mut T)
   }
-
-  pub fn at(&self, ptr: *const T) -> &T {
-    unsafe { &*ptr }
-  }
-
-  pub fn at_mut(&mut self, ptr: *mut T) -> &mut T {
-    unsafe { &mut *ptr }
-  }
 }
 
 #[derive(Debug)]

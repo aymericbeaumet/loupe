@@ -1,17 +1,20 @@
 use crate::arena::{Arena, TypedArena};
 use crate::record::Record;
 use itertools::Itertools;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::collections::HashMap;
 use unicode_segmentation::UnicodeSegmentation;
 
+#[derive(Clone, Copy)]
 pub struct Node256 {
-  children: [*mut Node256; 256],
-  leaf: *mut Leaf256,
+  children_ptrs: [*mut Node256; 256],
+  leaf_ptr: *mut Leaf256,
 }
 
 impl Node256 {
   // Find a child of the current node
   pub fn child(&self, key: u8) -> Option<&Self> {
-    let child_ptr = self.children[key as usize];
+    let child_ptr = self.children_ptrs[key as usize];
     unsafe { child_ptr.as_ref() }
   }
 
@@ -23,11 +26,12 @@ impl Node256 {
   // Return an iterator for the children of the current node
   pub fn children(&self) -> impl Iterator<Item = (u8, &Self)> {
     self
-      .children
+      .children_ptrs
       .iter()
       .enumerate()
       .filter_map(|(key, child_ptr)| {
-        unsafe { child_ptr.as_ref() }.map(|child_node| (key as u8, child_node))
+        let child_node = unsafe { child_ptr.as_ref() };
+        child_node.map(|child_node| (key as u8, child_node))
       })
   }
 
@@ -42,11 +46,12 @@ impl Node256 {
 
   // Return an iterator for the records of the current node
   pub fn records(&self) -> impl Iterator<Item = Record> {
-    unsafe { self.leaf.as_ref() }
+    let leaf_node = unsafe { self.leaf_ptr.as_ref() };
+    leaf_node
       .into_iter()
       .flat_map(|leaf| leaf.records.chunks_exact(2))
       .map(|chunk| (chunk[0], chunk[1]))
-      .take_while(|(ptr_start, _ptr_end)| !ptr_start.is_null())
+      .take_while(|(ptr_start, ptr_end)| !ptr_start.is_null() && !ptr_end.is_null())
       .map(|(ptr_start, ptr_end)| {
         let len = ptr_end as usize - ptr_start as usize;
         let bytes = unsafe { std::slice::from_raw_parts(ptr_start, len) };
@@ -61,6 +66,18 @@ impl Node256 {
         .children_deep()
         .flat_map(|(_key, child)| child.records()),
     )
+  }
+}
+
+impl Serialize for Node256 {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    let mut state = serializer.serialize_struct("Node256", 2)?;
+    state.serialize_field("children", &self.children().collect::<HashMap<_, _>>())?;
+    state.serialize_field("records", &self.records().collect::<Vec<_>>())?;
+    state.end()
   }
 }
 
@@ -90,6 +107,10 @@ impl Index {
     index
   }
 
+  pub fn root_node(&self) -> &Node256 {
+    unsafe { &*self.root_ptr }
+  }
+
   pub fn add_record_slice(&mut self, bytes: &[u8]) {
     let stored = self.records.store(bytes).unwrap();
     let record: Record = serde_json::from_slice(bytes).unwrap();
@@ -104,20 +125,22 @@ impl Index {
     key.unicode_words().for_each(|w| {
       let mut current_ptr = self.root_ptr;
       w.bytes().for_each(|b| {
-        let child_ptr = self.nodes.at_mut(current_ptr).children[b as usize];
+        let current_node = unsafe { &mut *current_ptr };
+        let child_ptr = current_node.children_ptrs[b as usize];
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
         } else {
           let child_ptr = self.nodes.alloc().unwrap();
-          self.nodes.at_mut(current_ptr).children[b as usize] = child_ptr;
+          let child_node = unsafe { &mut *current_ptr };
+          child_node.children_ptrs[b as usize] = child_ptr;
           current_ptr = child_ptr;
         }
       });
-      let mut current_node = self.nodes.at_mut(current_ptr);
-      if current_node.leaf.is_null() {
-        current_node.leaf = self.leaves.alloc().unwrap();
+      let mut current_node = unsafe { &mut *current_ptr };
+      if current_node.leaf_ptr.is_null() {
+        current_node.leaf_ptr = self.leaves.alloc().unwrap();
       }
-      let leaf = self.leaves.at_mut(current_node.leaf);
+      let leaf = unsafe { &mut *current_node.leaf_ptr };
       for i in (0..leaf.records.len()).step_by(2) {
         if leaf.records[i] == record_ptr_start {
           break;
@@ -131,23 +154,6 @@ impl Index {
     });
   }
 
-  pub fn nodes(&self) -> Nodes {
-    Nodes {
-      index: self,
-      stack: vec![(vec![], self.root_ptr)],
-    }
-  }
-
-  pub fn edges(&self) -> impl Iterator<Item = ((Vec<u8>, &Node256), (Vec<u8>, &Node256))> + '_ {
-    self.nodes().flat_map(move |(parent_path, parent_node)| {
-      parent_node.children().map(move |(child_key, child_node)| {
-        let mut child_path = parent_path.clone();
-        child_path.push(child_key);
-        ((parent_path.clone(), parent_node), (child_path, child_node))
-      })
-    })
-  }
-
   pub fn query(&self, query: &str) -> impl Iterator<Item = Record> {
     let root_node = unsafe { &*self.root_ptr };
     root_node
@@ -155,36 +161,5 @@ impl Index {
       .into_iter()
       .flat_map(|node| node.records_deep())
       .unique_by(|record| record.id)
-  }
-}
-
-pub struct Nodes<'a> {
-  index: &'a Index,
-  stack: Vec<(Vec<u8>, *const Node256)>,
-}
-
-impl<'a> Iterator for Nodes<'a> {
-  type Item = (Vec<u8>, &'a Node256);
-
-  fn next(&mut self) -> Option<(Vec<u8>, &'a Node256)> {
-    let (path, current_ptr) = self.stack.pop()?;
-    let current_node = self.index.nodes.at(current_ptr);
-    self.stack.extend(
-      current_node
-        .children
-        .iter()
-        .enumerate()
-        .filter_map(|(key, &child_ptr)| {
-          if child_ptr.is_null() {
-            None
-          } else {
-            let mut child_path = path.clone();
-            child_path.push(key as u8);
-            Some((child_path, child_ptr as *const Node256))
-          }
-        })
-        .rev(),
-    );
-    Some((path, current_node))
   }
 }

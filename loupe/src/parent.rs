@@ -1,4 +1,5 @@
 use crate::index::Index;
+use crate::index::Node256;
 use crate::record::Record;
 use rocket::config::{Config, Environment};
 use rocket::State;
@@ -14,12 +15,13 @@ fn add_records(
 ) -> &'static str {
   let mut batch = WriteBatch::default();
   for record in records.into_inner() {
-    let as_string = serde_json::to_string(&record).unwrap();
-    let as_bytes = as_string.as_bytes();
-    batch.put(record.id.to_ne_bytes(), as_bytes).unwrap();
+    let id_as_bytes = record.id.to_ne_bytes();
+    let record_as_string = record.to_string();
+    let record_as_bytes = record_as_string.as_bytes();
+    batch.put(id_as_bytes, record_as_bytes).unwrap();
     {
       let mut index = index.lock().unwrap();
-      index.add_record_slice(as_bytes);
+      index.add_record_slice(record_as_bytes);
     }
   }
   db.write(batch).unwrap();
@@ -27,24 +29,10 @@ fn add_records(
   ""
 }
 
-#[get("/debug/dot", format = "json")]
-fn dot(index: State<Arc<Mutex<Index>>>) -> String {
-  let mut output = vec!["digraph index {".to_owned()];
-  {
-    let index = index.lock().unwrap();
-    for ((parent_path, _), (child_path, child_node)) in index.edges() {
-      let parent_path = format_path(&parent_path);
-      let child_path = format_path(&child_path);
-      output.push(format!("  \"{}\" -> \"{}\"", parent_path, child_path));
-      for record in child_node.records() {
-        let record = str::replace(&record.to_string(), "\"", "'");
-        output.push(format!("  \"{}\" -> \"{}\"", child_path, record));
-      }
-    }
-  }
-  output.push("}".to_owned());
-  output.push("".to_owned());
-  output.join("\n")
+#[get("/debug/nodes")]
+fn nodes(index: State<Arc<Mutex<Index>>>) -> Json<Node256> {
+  let index = index.lock().unwrap();
+  Json(*index.root_node())
 }
 
 pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
@@ -65,19 +53,8 @@ pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
   rocket::custom(config)
     .manage(db)
     .manage(index)
-    .mount("/", routes![add_records, dot])
+    .mount("/", routes![add_records, nodes])
     .launch();
 
   Ok(())
-}
-
-fn format_path(path: &[u8]) -> String {
-  match std::str::from_utf8(path) {
-    Ok(s) => s.to_owned(),
-    Err(error) => format!(
-      "{}{:02X?}",
-      unsafe { std::str::from_utf8_unchecked(&path[..error.valid_up_to()]) },
-      &path[error.valid_up_to()..]
-    ),
-  }
 }
