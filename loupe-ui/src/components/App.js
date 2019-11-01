@@ -1,46 +1,28 @@
-import React from "react";
-import Axios from "axios";
-import TextField from "@material-ui/core/TextField";
+import React, { useState } from "react";
+import Table from "./Table";
+import Network from "./Network";
 
-class App extends React.Component {
-  state = {
-    records: []
-  };
+export default function App() {
+  const [showNetwork, setShowNetwork] = useState(false);
+  const [query, setQuery] = useState("");
 
-  handleChange = event => {
-    const query = event.target.value;
-    if (!query) {
-      this.setState({ records: [] });
-    } else {
-      Axios.post("http://localhost:9292/", { query }).then(response =>
-        this.setState({ records: response.data })
-      );
-    }
-  };
-
-  render() {
-    return (
+  return (
+    <>
       <form autoComplete="off">
-        <TextField
-          id="outlined-basic"
-          label="Search a record"
-          margin="normal"
-          variant="outlined"
+        <input
+          type="text"
+          onChange={event => setQuery(event.target.value)}
+          value={query}
+          placeholder="search records..."
           autoFocus={true}
-          onChange={this.handleChange}
         />
-        <table>
-          <tbody>
-            {this.state.records.map(record => (
-              <tr key={record.id}>
-                <td>{JSON.stringify(record)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <input
+          type="checkbox"
+          onChange={event => setShowNetwork(event.target.checked)}
+          value={showNetwork}
+        />
       </form>
-    );
-  }
+      {showNetwork ? <Network query={query} /> : <Table query={query} />}
+    </>
+  );
 }
-
-export default App;
