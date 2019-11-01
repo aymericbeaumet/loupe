@@ -30,8 +30,7 @@ impl Node256 {
       .iter()
       .enumerate()
       .filter_map(|(key, child_ptr)| {
-        let child_node = unsafe { child_ptr.as_ref() };
-        child_node.map(|child_node| (key as u8, child_node))
+        unsafe { child_ptr.as_ref() }.map(|child_node| (key as u8, child_node))
       })
   }
 
@@ -46,8 +45,7 @@ impl Node256 {
 
   // Return an iterator for the records of the current node
   pub fn records(&self) -> impl Iterator<Item = Record> {
-    let leaf_node = unsafe { self.leaf_ptr.as_ref() };
-    leaf_node
+    unsafe { self.leaf_ptr.as_ref() }
       .into_iter()
       .flat_map(|leaf| leaf.records.chunks_exact(2))
       .map(|chunk| (chunk[0], chunk[1]))
