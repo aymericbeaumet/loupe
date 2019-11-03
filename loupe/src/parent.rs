@@ -33,13 +33,16 @@ fn add_records(
 }
 
 #[get("/debug/nodes?<query>")]
-fn debug_nodes(index: State<Arc<Mutex<Index>>>, query: Option<&RawStr>) -> Json<Option<Node256>> {
+fn debug_nodes(
+  index: State<Arc<Mutex<Index>>>,
+  query: Option<&RawStr>,
+) -> Result<Json<Option<Node256>>, Box<dyn std::error::Error>> {
   let index = index.lock().unwrap();
   let root = match query {
-    Some(query) => index.root_node().child_deep(query.as_bytes()),
+    Some(query) => index.root_node().child_deep(query.url_decode()?.as_bytes()),
     None => Some(index.root_node()),
   };
-  Json(root.copied())
+  Ok(Json(root.copied()))
 }
 
 #[options("/debug/nodes")]

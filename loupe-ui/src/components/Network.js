@@ -3,13 +3,19 @@ import Axios from "axios";
 import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
 
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
 cytoscape.use(dagre);
 
 export default function Network({ query }) {
-  const divRef = useRef();
+  const cyRef = useRef(null);
+  const divRef = useRef(null);
 
   useEffect(() => {
     const source = Axios.CancelToken.source();
+
+    divRef.current.innerHTML = "";
 
     Axios.get(`http://localhost:9191/debug/nodes`, {
       params: { query },
@@ -21,7 +27,7 @@ export default function Network({ query }) {
           ? [
               {
                 id: nextId++,
-                path: [],
+                path: encoder.encode(query),
                 ...response.data
               }
             ]
@@ -31,25 +37,41 @@ export default function Network({ query }) {
         while ((node = stack.pop())) {
           elements.push({
             data: {
+              classes: "node",
               id: node.id,
-              label: JSON.stringify(node.path)
+              content: decoder.decode(Uint8Array.from(node.path))
             }
           });
           for (const [key, child] of node.children) {
             child.id = nextId++;
             child.path = [...node.path, key];
             elements.push({
-              data: {
-                source: node.id,
-                target: child.id
-              }
+              data: { source: node.id, target: child.id }
             });
             stack.push(child);
           }
+          for (const record of node.records) {
+            const recordId = nextId++;
+            elements.push({
+              data: {
+                classes: "leaf",
+                id: recordId,
+                content: record.name
+              }
+            });
+            elements.push({
+              data: {
+                source: node.id,
+                target: recordId
+              }
+            });
+          }
         }
-        cytoscape({
+        cyRef.current = cytoscape({
           container: divRef.current,
           elements,
+          autoungrabify: true,
+          autounselectify: true,
           layout: {
             name: "dagre",
             nodeDimensionsIncludeLabels: true
@@ -58,7 +80,16 @@ export default function Network({ query }) {
             {
               selector: "node",
               style: {
-                label: "data(label)"
+                content: "data(content)",
+                "text-valign": "center"
+              }
+            },
+            {
+              selector: "edge",
+              style: {
+                width: 4,
+                "target-arrow-shape": "triangle",
+                "curve-style": "bezier"
               }
             }
           ]
@@ -70,7 +101,12 @@ export default function Network({ query }) {
         }
       });
 
-    return () => source.cancel();
+    return () => {
+      source.cancel();
+      if (cyRef.current) {
+        cyRef.current.stop();
+      }
+    };
   }, [query]);
 
   return <div ref={divRef} style={{ height: "100vh" }}></div>;
