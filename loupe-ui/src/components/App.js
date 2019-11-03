@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Table from "./Table";
 import Network from "./Network";
 
 export default function App() {
+  const inputTextRef = useRef(null);
   const [showNetwork, setShowNetwork] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -10,6 +11,7 @@ export default function App() {
     <>
       <form autoComplete="off">
         <input
+          ref={inputTextRef}
           type="text"
           onChange={event => setQuery(event.target.value)}
           value={query}
@@ -18,7 +20,10 @@ export default function App() {
         />
         <input
           type="checkbox"
-          onChange={event => setShowNetwork(event.target.checked)}
+          onChange={event => {
+            setShowNetwork(event.target.checked);
+            inputTextRef.current.focus();
+          }}
           value={showNetwork}
         />
       </form>

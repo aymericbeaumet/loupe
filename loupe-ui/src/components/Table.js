@@ -5,9 +5,21 @@ export default function Table({ query }) {
   const [records, setRecords] = useState([]);
 
   useEffect(() => {
-    Axios.post("http://localhost:9292/", {
-      query
-    }).then(response => setRecords(response.data));
+    const source = Axios.CancelToken.source();
+
+    Axios.post(
+      "http://localhost:9292/",
+      { query },
+      { cancelToken: source.token }
+    )
+      .then(response => setRecords(response.data))
+      .catch(error => {
+        if (!Axios.isCancel(error)) {
+          throw error;
+        }
+      });
+
+    return () => source.cancel();
   }, [query]);
 
   return (

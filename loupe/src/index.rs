@@ -2,7 +2,6 @@ use crate::arena::{Arena, TypedArena};
 use crate::record::Record;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use std::collections::HashMap;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy)]
@@ -72,8 +71,8 @@ impl Serialize for Node256 {
   where
     S: Serializer,
   {
-    let mut state = serializer.serialize_struct("Node256", 2)?;
-    state.serialize_field("children", &self.children().collect::<HashMap<_, _>>())?;
+    let mut state = serializer.serialize_struct("Node256", 3)?;
+    state.serialize_field("children", &self.children().collect::<Vec<_>>())?;
     state.serialize_field("records", &self.records().collect::<Vec<_>>())?;
     state.end()
   }
