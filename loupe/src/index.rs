@@ -151,11 +151,16 @@ impl Index {
     });
   }
 
-  pub fn query(&self, query: &str) -> impl Iterator<Item = Record> {
-    let root_node = unsafe { &*self.root_ptr };
-    root_node
-      .child_deep(query.as_bytes())
-      .into_iter()
+  pub fn query_nodes<'a>(&'a self, query: &'a str) -> impl Iterator<Item = &Node256> {
+    let root_node = self.root_node();
+    query
+      .unicode_words()
+      .filter_map(move |word| root_node.child_deep(word.as_bytes()))
+  }
+
+  pub fn query_records<'a>(&'a self, query: &'a str) -> impl Iterator<Item = Record> + 'a {
+    self
+      .query_nodes(query)
       .flat_map(|node| node.records_deep())
       .unique_by(|record| record.id)
   }

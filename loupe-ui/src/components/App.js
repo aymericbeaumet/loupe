@@ -8,6 +8,8 @@ export default function App() {
   const [query = "", setQuery] = useQueryParam("query", StringParam);
   const [network = false, setNetwork] = useQueryParam("network", BooleanParam);
 
+  let normalizedQuery = query.trim();
+
   return (
     <>
       <input
@@ -26,7 +28,11 @@ export default function App() {
         }}
         checked={network}
       />
-      {network ? <Network query={query} /> : <Table query={query} />}
+      {network ? (
+        <Network query={normalizedQuery} />
+      ) : (
+        <Table query={normalizedQuery} />
+      )}
     </>
   );
 }

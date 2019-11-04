@@ -17,21 +17,17 @@ export default function Network({ query }) {
 
     divRef.current.innerHTML = "";
 
-    Axios.get(`http://localhost:9191/debug/nodes`, {
+    Axios.get("http://localhost:9191/debug/nodes", {
       params: { query },
       cancelToken: source.token
     })
       .then(response => {
         let nextId = 0;
-        const stack = response.data
-          ? [
-              {
-                id: nextId++,
-                path: encoder.encode(query),
-                ...response.data
-              }
-            ]
-          : [];
+        const stack = response.data.map(node => ({
+          id: nextId++,
+          path: [],
+          ...node
+        }));
         const elements = [];
         let node;
         while ((node = stack.pop())) {
