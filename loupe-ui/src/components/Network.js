@@ -36,8 +36,8 @@ export default function Network({ query }) {
         let node;
         while ((node = stack.pop())) {
           elements.push({
+            classes: "node",
             data: {
-              classes: "node",
               id: node.id,
               content: decoder.decode(Uint8Array.from(node.path))
             }
@@ -51,10 +51,10 @@ export default function Network({ query }) {
             stack.push(child);
           }
           for (const record of node.records) {
-            const recordId = nextId++;
+            const recordId = `record:${record.id}`;
             elements.push({
+              classes: "record",
               data: {
-                classes: "leaf",
                 id: recordId,
                 content: record.name
               }
@@ -85,11 +85,16 @@ export default function Network({ query }) {
               }
             },
             {
+              selector: "node.record",
+              style: {
+                "background-color": "green"
+              }
+            },
+            {
               selector: "edge",
               style: {
-                width: 4,
-                "target-arrow-shape": "triangle",
-                "curve-style": "bezier"
+                width: 1,
+                "target-arrow-shape": "triangle"
               }
             }
           ]
