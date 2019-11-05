@@ -92,7 +92,6 @@ function renderNetwork({ container, elements }) {
     container,
     elements,
     autoungrabify: true,
-    autounselectify: true,
     motionBlur: true,
     layout: {
       name: "dagre",
@@ -102,7 +101,10 @@ function renderNetwork({ container, elements }) {
       {
         selector: "node",
         style: {
-          "text-valign": "center"
+          "text-valign": "center",
+          "background-color": "white",
+          "border-width": 1,
+          "border-color": "black"
         }
       },
       {
@@ -125,11 +127,49 @@ function renderNetwork({ container, elements }) {
           "curve-style": "bezier",
           "target-arrow-shape": "triangle"
         }
+      },
+      {
+        selector: ".highlight",
+        style: {
+          // node
+          "border-width": 2,
+          "border-color": "orange",
+          // edge
+          "line-color": "orange",
+          "target-arrow-shape": "triangle",
+          "target-arrow-color": "orange"
+        }
       }
     ]
   });
 
   cy.ready(() => {
+    cy.elements("node")
+      .unbind("select")
+      .bind("select", ({ target: node }) => {
+        node.addClass("highlight");
+        node.predecessors().forEach(p => p.addClass("highlight"));
+        node.successors().forEach(s => s.addClass("highlight"));
+      })
+      .unbind("unselect")
+      .bind("unselect", ({ target: node }) => {
+        node.removeClass("highlight");
+        node.predecessors().forEach(p => p.removeClass("highlight"));
+        node.successors().forEach(s => s.removeClass("highlight"));
+      });
+
+    cy.elements("edge")
+      .unbind("select")
+      .bind("select", ({ target: node }) => {
+        node.addClass("highlight");
+        node.connectedNodes().forEach(n => n.addClass("highlight"));
+      })
+      .unbind("unselect")
+      .bind("unselect", ({ target: node }) => {
+        node.removeClass("highlight");
+        node.connectedNodes().forEach(n => n.removeClass("highlight"));
+      });
+
     cy.elements("node.byte")
       .unbind("mouseover")
       .bind("mouseover", ({ target: byte }) => {
