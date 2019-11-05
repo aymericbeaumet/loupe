@@ -50,7 +50,7 @@ function buildElements(response) {
   let nextId = 0;
   const stack = Object.entries(response.data).map(([word, node]) => ({
     id: nextId++,
-    path: encoder.encode(word),
+    path: [...encoder.encode(word)],
     ...node
   }));
   const elements = [];
@@ -175,14 +175,10 @@ function renderNetwork({ container, elements }) {
       .bind("mouseover", ({ target: byte }) => {
         if (!byte.tippy) {
           byte.tippy = tippy(byte.popperRef(), {
-            content() {
-              const div = document.createElement("div");
-              div.innerHTML = `[${byte
-                .data("byte")
-                .path.map(n => `0x${n.toString(16).toUpperCase()}`)
-                .join(", ")}]`;
-              return div;
-            },
+            content: `[${byte
+              .data("byte")
+              .path.map(n => `0x${n.toString(16).toUpperCase()}`)
+              .join(", ")}]`,
             placement: "top",
             trigger: "manual",
             hideOnClick: false,
@@ -200,11 +196,7 @@ function renderNetwork({ container, elements }) {
       .bind("mouseover", ({ target: record }) => {
         if (!record.tippy) {
           record.tippy = tippy(record.popperRef(), {
-            content() {
-              const div = document.createElement("div");
-              div.innerHTML = JSON.stringify(record.data("record"));
-              return div;
-            },
+            content: JSON.stringify(record.data("record")),
             placement: "bottom",
             trigger: "manual",
             hideOnClick: false,
