@@ -23,9 +23,9 @@ export default function Network({ query }) {
     })
       .then(response => {
         let nextId = 0;
-        const stack = response.data.map(node => ({
+        const stack = Object.entries(response.data).map(([word, node]) => ({
           id: nextId++,
-          path: [],
+          path: encoder.encode(word),
           ...node
         }));
         const elements = [];

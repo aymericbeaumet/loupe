@@ -8,6 +8,7 @@ use rocket::response::Response;
 use rocket::State;
 use rocket_contrib::json::Json;
 use rocksdb::{WriteBatch, DB};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[post("/records", format = "json", data = "<records>")]
@@ -36,11 +37,11 @@ fn add_records(
 fn debug_nodes(
   index: State<Arc<Mutex<Index>>>,
   query: &RawStr,
-) -> Result<Json<Vec<Node256>>, Box<dyn std::error::Error>> {
+) -> Result<Json<HashMap<String, Node256>>, Box<dyn std::error::Error>> {
   let index = index.lock().unwrap();
   let nodes = index
-    .query_nodes(&query.url_decode().unwrap())
-    .copied()
+    .query_nodes(&query.url_decode().unwrap().trim())
+    .map(|(k, v)| (String::from(k), *v))
     .collect();
   Ok(Json(nodes))
 }

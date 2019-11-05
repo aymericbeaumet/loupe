@@ -1719,10 +1719,10 @@ cytoscape-dagre@2.2.2:
   dependencies:
     dagre "^0.8.2"
 
-cytoscape@3.2.0:
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/cytoscape/-/cytoscape-3.2.0.tgz#72b15911004ef6326690258407f9f9115fb81a67"
-  integrity sha1-crFZEQBO9jJmkCWEB/n5EV+4Gmc=
+cytoscape@3.11.0:
+  version "3.11.0"
+  resolved "https://registry.yarnpkg.com/cytoscape/-/cytoscape-3.11.0.tgz#c5fca7c8b3a01ba24b4d7b8f3eddb1e99d395ed3"
+  integrity sha512-xA9S5UiTjwFwZjxZCTIJjDU5ef2XSqw+/gk+bLcqdOZ496EoPSfnbozGRnKZhxKIVT++NNyWtT7fW1eLU7denQ==
   dependencies:
     heap "^0.2.6"
     lodash.debounce "^4.0.8"

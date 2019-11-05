@@ -71,7 +71,7 @@ impl Serialize for Node256 {
   where
     S: Serializer,
   {
-    let mut state = serializer.serialize_struct("Node256", 3)?;
+    let mut state = serializer.serialize_struct("Node256", 2)?;
     state.serialize_field("children", &self.children().collect::<Vec<_>>())?;
     state.serialize_field("records", &self.records().collect::<Vec<_>>())?;
     state.end()
@@ -151,17 +151,25 @@ impl Index {
     });
   }
 
-  pub fn query_nodes<'a>(&'a self, query: &'a str) -> impl Iterator<Item = &Node256> {
+  pub fn query_nodes<'a>(
+    &'a self,
+    query: &'a str,
+  ) -> Box<dyn Iterator<Item = (&str, &Node256)> + 'a> {
     let root_node = self.root_node();
-    query
-      .unicode_words()
-      .filter_map(move |word| root_node.child_deep(word.as_bytes()))
+    match query {
+      "" => Box::new(vec![("", root_node)].into_iter()),
+      _ => Box::new(query.unicode_words().filter_map(move |word| {
+        root_node
+          .child_deep(word.as_bytes())
+          .map(|child| (word, child))
+      })),
+    }
   }
 
   pub fn query_records<'a>(&'a self, query: &'a str) -> impl Iterator<Item = Record> + 'a {
     self
       .query_nodes(query)
-      .flat_map(|node| node.records_deep())
+      .flat_map(|(_word, node)| node.records_deep())
       .unique_by(|record| record.id)
   }
 }
