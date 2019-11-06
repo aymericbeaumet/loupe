@@ -98,6 +98,7 @@ function renderNetwork({ container, elements }) {
       nodeDimensionsIncludeLabels: true
     },
     style: [
+      // node
       {
         selector: "node",
         style: {
@@ -120,6 +121,7 @@ function renderNetwork({ container, elements }) {
           "background-color": "green"
         }
       },
+      // edge
       {
         selector: "edge",
         style: {
@@ -128,15 +130,36 @@ function renderNetwork({ container, elements }) {
           "target-arrow-shape": "triangle"
         }
       },
+      // selected
       {
-        selector: ".highlight",
+        selector: "node:selected",
         style: {
-          // node
           "border-width": 2,
           "border-color": "orange",
-          // edge
+          "background-color": "orange"
+        }
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          width: 2,
           "line-color": "orange",
-          "target-arrow-shape": "triangle",
+          "target-arrow-color": "orange"
+        }
+      },
+      // highlight
+      {
+        selector: "node.highlight",
+        style: {
+          "border-width": 2,
+          "border-color": "orange"
+        }
+      },
+      {
+        selector: "edge.highlight",
+        style: {
+          width: 1,
+          "line-color": "orange",
           "target-arrow-color": "orange"
         }
       }
@@ -147,13 +170,11 @@ function renderNetwork({ container, elements }) {
     cy.elements("node")
       .unbind("select")
       .bind("select", ({ target: node }) => {
-        node.addClass("highlight");
         node.predecessors().forEach(p => p.addClass("highlight"));
         node.successors().forEach(s => s.addClass("highlight"));
       })
       .unbind("unselect")
       .bind("unselect", ({ target: node }) => {
-        node.removeClass("highlight");
         node.predecessors().forEach(p => p.removeClass("highlight"));
         node.successors().forEach(s => s.removeClass("highlight"));
       });
@@ -161,12 +182,10 @@ function renderNetwork({ container, elements }) {
     cy.elements("edge")
       .unbind("select")
       .bind("select", ({ target: node }) => {
-        node.addClass("highlight");
         node.connectedNodes().forEach(n => n.addClass("highlight"));
       })
       .unbind("unselect")
       .bind("unselect", ({ target: node }) => {
-        node.removeClass("highlight");
         node.connectedNodes().forEach(n => n.removeClass("highlight"));
       });
 
