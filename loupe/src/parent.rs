@@ -40,8 +40,8 @@ fn debug_nodes(
 ) -> Result<Json<HashMap<String, Node256>>, Box<dyn std::error::Error>> {
   let index = index.lock().unwrap();
   let nodes = index
-    .query_nodes(&query.url_decode().unwrap())
-    .map(|(k, v)| (String::from(k), *v))
+    .query_nodes(&query.url_decode()?)
+    .map(|(k, v)| (k, *v))
     .collect();
   Ok(Json(nodes))
 }
