@@ -14,4 +14,5 @@ rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb.git", rev = "4ca
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
 unicode-segmentation = "1.5.0"
+unidecode = "0.3.0"
 uuid = { version = "0.8.1", features = ["v4"] }

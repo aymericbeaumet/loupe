@@ -15,7 +15,7 @@ struct Body {
 
 #[post("/", format = "json", data = "<body>")]
 fn query(index: State<Index>, body: Json<Body>) -> Json<Vec<Record>> {
-  let records = index.query_records(&body.query.trim()).collect();
+  let records = index.query_records(&body.query).collect();
   Json(records)
 }
 

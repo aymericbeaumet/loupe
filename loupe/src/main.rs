@@ -6,6 +6,7 @@ extern crate rocket;
 mod arena;
 mod child;
 mod index;
+mod normalizer;
 mod parent;
 mod record;
 

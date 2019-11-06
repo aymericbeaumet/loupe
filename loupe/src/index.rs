@@ -1,8 +1,8 @@
 use crate::arena::{Arena, TypedArena};
+use crate::normalizer::normalize;
 use crate::record::Record;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy)]
 pub struct Node256 {
@@ -119,17 +119,17 @@ impl Index {
   }
 
   pub fn insert(&mut self, key: &str, (record_ptr_start, record_ptr_end): (*const u8, *const u8)) {
-    key.unicode_words().for_each(|w| {
+    normalize(key).for_each(|word| {
       let mut current_ptr = self.root_ptr;
-      w.bytes().for_each(|b| {
+      word.bytes().for_each(|byte| {
         let current_node = unsafe { &mut *current_ptr };
-        let child_ptr = current_node.children_ptrs[b as usize];
+        let child_ptr = current_node.children_ptrs[byte as usize];
         if !child_ptr.is_null() {
           current_ptr = child_ptr;
         } else {
           let child_ptr = self.nodes.alloc().unwrap();
           let child_node = unsafe { &mut *current_ptr };
-          child_node.children_ptrs[b as usize] = child_ptr;
+          child_node.children_ptrs[byte as usize] = child_ptr;
           current_ptr = child_ptr;
         }
       });
@@ -154,16 +154,13 @@ impl Index {
   pub fn query_nodes<'a>(
     &'a self,
     query: &'a str,
-  ) -> Box<dyn Iterator<Item = (&str, &Node256)> + 'a> {
+  ) -> impl Iterator<Item = (String, &Node256)> + 'a {
     let root_node = self.root_node();
-    match query {
-      "" => Box::new(vec![("", root_node)].into_iter()),
-      _ => Box::new(query.unicode_words().filter_map(move |word| {
-        root_node
-          .child_deep(word.as_bytes())
-          .map(|child| (word, child))
-      })),
-    }
+    normalize(query).filter_map(move |word| {
+      root_node
+        .child_deep(word.as_bytes())
+        .map(|child| (word, child))
+    })
   }
 
   pub fn query_records<'a>(&'a self, query: &'a str) -> impl Iterator<Item = Record> + 'a {
