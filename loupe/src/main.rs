@@ -1,4 +1,4 @@
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(decl_macro, proc_macro_hygiene)]
 
 #[macro_use]
 extern crate rocket;
@@ -6,9 +6,9 @@ extern crate rocket;
 mod arena;
 mod child;
 mod index;
-mod normalizer;
 mod parent;
 mod record;
+mod tokenizer;
 
 use index::Index;
 use nix::unistd::{fork, ForkResult};

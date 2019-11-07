@@ -1,6 +1,6 @@
 use crate::arena::{Arena, TypedArena};
-use crate::normalizer::normalize;
 use crate::record::Record;
+use crate::tokenizer::TokenizerExt;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
@@ -119,9 +119,9 @@ impl Index {
   }
 
   pub fn insert(&mut self, key: &str, (record_ptr_start, record_ptr_end): (*const u8, *const u8)) {
-    normalize(key).for_each(|word| {
+    key.tokenize().for_each(|token| {
       let mut current_ptr = self.root_ptr;
-      word.bytes().for_each(|byte| {
+      token.bytes().for_each(|byte| {
         let current_node = unsafe { &mut *current_ptr };
         let child_ptr = current_node.children_ptrs[byte as usize];
         if !child_ptr.is_null() {
@@ -156,10 +156,10 @@ impl Index {
     query: &'a str,
   ) -> impl Iterator<Item = (String, &Node256)> + 'a {
     let root_node = self.root_node();
-    normalize(query).filter_map(move |word| {
+    query.tokenize().filter_map(move |token| {
       root_node
-        .child_deep(word.as_bytes())
-        .map(|child| (word, child))
+        .child_deep(token.as_bytes())
+        .map(|child| (token, child))
     })
   }
 
