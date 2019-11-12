@@ -1,5 +1,4 @@
-use crate::index::Index;
-use crate::index::Node256;
+use crate::index::{Index, Node};
 use crate::record::Record;
 use rocket::config::{Config, Environment};
 use rocket::fairing::AdHoc;
@@ -9,24 +8,16 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use rocksdb::{WriteBatch, DB};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[post("/records", format = "json", data = "<records>")]
-fn add_records(
-  db: State<DB>,
-  index: State<Arc<Mutex<Index>>>,
-  records: Json<Vec<Record>>,
-) -> &'static str {
+fn add_records(db: State<DB>, index: State<Index>, records: Json<Vec<Record>>) -> &'static str {
   let mut batch = WriteBatch::default();
   for record in records.into_inner() {
     let id_as_bytes = record.id.to_ne_bytes();
     let record_as_string = record.to_string();
     let record_as_bytes = record_as_string.as_bytes();
     batch.put(id_as_bytes, record_as_bytes).unwrap();
-    {
-      let mut index = index.lock().unwrap();
-      index.add_record_slice(record_as_bytes);
-    }
+    index.add_record_slice(record_as_bytes);
   }
   db.write(batch).unwrap();
   // TODO: add record to the index as batch after they have been written to disk
@@ -34,15 +25,11 @@ fn add_records(
 }
 
 #[get("/debug/nodes?<query>")]
-fn debug_nodes(
-  index: State<Arc<Mutex<Index>>>,
+fn debug_nodes<'a>(
+  index: State<&'a Index>,
   query: &RawStr,
-) -> Result<Json<HashMap<String, Node256>>, Box<dyn std::error::Error>> {
-  let index = index.lock().unwrap();
-  let nodes = index
-    .query_nodes(&query.url_decode()?)
-    .map(|(k, v)| (k, *v))
-    .collect();
+) -> Result<Json<HashMap<String, &'a Node>>, Box<dyn std::error::Error>> {
+  let nodes = index.query_nodes(&query.url_decode()?).collect();
   Ok(Json(nodes))
 }
 
@@ -56,15 +43,11 @@ fn debug_nodes_cors() -> Result<Response<'static>, Status> {
     .ok()
 }
 
-pub fn main(index: Index) -> Result<(), Box<dyn std::error::Error>> {
-  let index = Arc::new(Mutex::new(index));
+pub fn main(index: &Index) -> Result<(), Box<dyn std::error::Error>> {
   let db = DB::open_default("records.rocksdb")?;
 
-  {
-    let mut index = index.lock().unwrap();
-    for (_, record) in db.iterator(rocksdb::IteratorMode::Start) {
-      index.add_record_slice(&record);
-    }
+  for (_, record) in db.iterator(rocksdb::IteratorMode::Start) {
+    index.add_record_slice(&record);
   }
 
   let config = Config::build(Environment::Development)

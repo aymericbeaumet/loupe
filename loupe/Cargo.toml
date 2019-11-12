@@ -5,12 +5,12 @@ authors = ["Aymeric Beaumet <hi@aymericbeaumet.com>"]
 edition = "2018"
 
 [dependencies]
+crossbeam = "0.7.3"
 itertools = "0.8.1"
-memmap = "0.7.0"
-nix = "0.15.0"
+lazy_static = "1.4.0"
 rocket = "0.4.2"
 rocket_contrib = "0.4.2"
-rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb.git", rev = "4ca979c24f0685f709fe06cd8ac7f66f4a76a8a1" }
+rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb.git", rev = "473b1671c75153502e980808d66cdeb3da7b7f73" }
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
 unicode-segmentation = "1.6.0"

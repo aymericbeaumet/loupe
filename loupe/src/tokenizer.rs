@@ -2,17 +2,14 @@ use unicode_segmentation::UnicodeSegmentation;
 use unidecode::unidecode;
 
 pub trait TokenizerExt {
-  type Iter: Iterator<Item = String>;
-
-  fn tokenize(&self) -> Self::Iter;
+  fn tokenize(&self) -> Vec<String>;
 }
 
 impl<'a> TokenizerExt for &'a str {
-  type Iter = std::iter::Map<unicode_segmentation::UnicodeWords<'a>, fn(&str) -> String>;
-
-  fn tokenize(&self) -> Self::Iter {
+  fn tokenize(&self) -> Vec<String> {
     self
       .unicode_words()
       .map(|word| unidecode(word).to_lowercase())
+      .collect() // TODO: do not collect here
   }
 }

@@ -1,84 +1,182 @@
-use memmap::{MmapMut, MmapOptions};
+use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::ptr;
+use std::slice;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-#[derive(Debug)]
-pub struct Arena {
-  mmap: MmapMut,
-  offset: AtomicIsize,
+// TODO: we will need this someday, right now we just make sure the address 0x0
+// is not publicly available outside the arena by allocating an empty header at
+// the beginning.
+struct AllocHeader(u128);
+
+impl AllocHeader {
+  fn new() -> Self {
+    Self(0x42)
+  }
 }
+
+pub struct Arena {
+  layout: Layout,
+  ptr: *mut u8,
+  offset: AtomicU32,
+}
+
+unsafe impl Send for Arena {}
+unsafe impl Sync for Arena {}
 
 impl Arena {
-  pub fn new(size: usize) -> Self {
-    Self {
-      mmap: MmapOptions::new().len(size).map_anon().unwrap(),
-      offset: AtomicIsize::new(0),
-    }
+  pub fn new() -> Self {
+    let layout = Layout::from_size_align(100_000_000, 32).expect("Unable to align layout");
+    let arena = Self {
+      layout,
+      ptr: unsafe { alloc_zeroed(layout) },
+      offset: AtomicU32::new(0),
+    };
+    arena.alloc_copy(AllocHeader::new());
+    arena
   }
 
-  pub fn alloc(&self, size: isize) -> Result<*mut u8, ArenaError> {
-    let offset = self.advance_offset(size)?;
-    Ok(unsafe { self.mmap.as_ptr().offset(offset) as *mut u8 })
+  // Value
+
+  #[inline(always)]
+  pub fn alloc<T>(&self) -> ArenaTypeKey<T> {
+    let size = std::mem::size_of::<T>() as u32;
+    let offset = self.offset.fetch_add(size, Ordering::SeqCst);
+    ArenaTypeKey::new(offset)
   }
 
-  pub fn store(&mut self, bytes: &[u8]) -> Result<(*const u8, *const u8), ArenaError> {
-    let len = bytes.len() as isize;
-    let offset = self.advance_offset(len)?;
-    self.mmap[(offset as usize)..(offset + len) as usize].copy_from_slice(bytes);
-    Ok((
-      unsafe { self.mmap.as_ptr().offset(offset) as *const u8 },
-      unsafe { self.mmap.as_ptr().offset(offset + len) as *const u8 },
-    ))
+  #[inline(always)]
+  pub fn alloc_copy<T>(&self, value: T) -> ArenaTypeKey<T> {
+    let key = self.alloc::<T>();
+    unsafe {
+      let dst = self.ptr.offset(key.offset as isize) as *mut _;
+      ptr::write(dst, value);
+    };
+    key
   }
 
-  fn advance_offset(&self, step: isize) -> Result<isize, ArenaError> {
-    let offset = self.offset.fetch_add(step, Ordering::SeqCst);
-    if (offset + step) as usize >= self.mmap.len() {
-      Err("Out of memory".into())
+  #[inline(always)]
+  pub fn get<T>(&self, key: &ArenaTypeKey<T>) -> Option<&T> {
+    if !key.is_null() {
+      Some(self.get_unchecked(key))
     } else {
-      Ok(offset)
+      None
+    }
+  }
+
+  #[inline(always)]
+  pub fn get_unchecked<T>(&self, key: &ArenaTypeKey<T>) -> &T {
+    unsafe {
+      let src = self.ptr.offset(key.offset as isize);
+      &*(src as *const T)
+    }
+  }
+
+  #[inline(always)]
+  pub fn get_mut<T>(&self, key: &ArenaTypeKey<T>) -> Option<&mut T> {
+    if !key.is_null() {
+      Some(self.get_mut_unchecked(key))
+    } else {
+      None
+    }
+  }
+
+  #[inline(always)]
+  pub fn get_mut_unchecked<T>(&self, key: &ArenaTypeKey<T>) -> &mut T {
+    unsafe {
+      let src = self.ptr.offset(key.offset as isize);
+      &mut *(src as *mut T)
+    }
+  }
+
+  // Slice
+
+  #[inline(always)]
+  pub fn alloc_slice<T>(&self, src: &[T]) -> ArenaSliceKey<T> {
+    let size = std::mem::size_of_val(src) as u32;
+    let offset = self.offset.fetch_add(size, Ordering::SeqCst);
+    ArenaSliceKey::new(offset, src.len() as u32)
+  }
+
+  #[inline(always)]
+  pub fn alloc_slice_copy<T>(&self, src: &[T]) -> ArenaSliceKey<T> {
+    let key = self.alloc_slice(src);
+    unsafe {
+      let dst = self.ptr.offset(key.offset as isize) as *mut _;
+      ptr::copy_nonoverlapping(src.as_ptr(), dst, key.len as usize);
+      slice::from_raw_parts_mut(dst, src.len())
+    };
+    key
+  }
+
+  #[inline(always)]
+  pub fn get_slice<T>(&self, key: &ArenaSliceKey<T>) -> Option<&[T]> {
+    if !key.is_null() {
+      Some(self.get_slice_unchecked(key))
+    } else {
+      None
+    }
+  }
+
+  #[inline(always)]
+  pub fn get_slice_unchecked<T>(&self, key: &ArenaSliceKey<T>) -> &[T] {
+    unsafe {
+      let src = self.ptr.offset(key.offset as isize) as *const _;
+      std::slice::from_raw_parts(src, key.len as usize)
     }
   }
 }
 
-#[derive(Debug)]
-pub struct TypedArena<T> {
-  arena: Arena,
-  t: PhantomData<T>,
-  t_size: isize,
+impl Drop for Arena {
+  fn drop(&mut self) {
+    unsafe { dealloc(self.ptr, self.layout) };
+  }
 }
 
-impl<T> TypedArena<T> {
-  pub fn new(size: usize) -> Self {
+#[derive(Clone, Copy)]
+pub struct ArenaTypeKey<T> {
+  offset: u32,
+  _t: PhantomData<T>,
+}
+
+impl<T> ArenaTypeKey<T> {
+  pub fn new(offset: u32) -> Self {
     Self {
-      arena: Arena::new(size),
-      t: PhantomData,
-      t_size: std::mem::size_of::<T>() as isize,
+      offset,
+      _t: PhantomData,
     }
   }
 
-  pub fn alloc(&self) -> Result<*mut T, ArenaError> {
-    Ok(self.arena.alloc(self.t_size)? as *mut _ as *mut T)
+  #[inline(always)]
+  pub fn is_null(&self) -> bool {
+    self.offset == 0
   }
 }
 
-#[derive(Debug)]
-pub struct ArenaError(String);
+#[derive(Clone, Copy)]
+pub struct ArenaSliceKey<T> {
+  offset: u32,
+  len: u32,
+  _t: PhantomData<T>,
+}
 
-impl From<&str> for ArenaError {
-  fn from(s: &str) -> Self {
-    Self(s.to_owned())
+impl<T> ArenaSliceKey<T> {
+  pub fn new(offset: u32, len: u32) -> Self {
+    Self {
+      offset,
+      len,
+      _t: PhantomData,
+    }
+  }
+
+  #[inline(always)]
+  pub fn is_null(&self) -> bool {
+    self.offset == 0 || self.len == 0
   }
 }
 
-impl std::fmt::Display for ArenaError {
-  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-    write!(f, "{}", self.0)
-  }
-}
-
-impl std::error::Error for ArenaError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-    None
+impl<T> PartialEq for ArenaSliceKey<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.offset == other.offset && self.len == other.len
   }
 }
