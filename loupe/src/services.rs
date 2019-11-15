@@ -1,6 +1,7 @@
 use crate::index::{Index, Node};
 use crate::record::Record;
 use rocksdb::{WriteBatch, DB};
+use serde::Deserialize;
 use std::collections::HashMap;
 use warp::{Filter, Rejection};
 
@@ -40,13 +41,13 @@ pub fn restricted(
     .and(warp::body::json())
     .and(db)
     .and(index)
-    .and_then(add_records);
+    .map(add_records);
 
   let debug_nodes_get = warp::get()
     .and(warp::path("/debug/nodes"))
     .and(warp::query())
     .and(index)
-    .and_then(debug_nodes);
+    .map(debug_nodes);
 
   add_records_post.or(debug_nodes_get).with(cors)
 }
@@ -69,6 +70,7 @@ fn add_records(records: Vec<Record>, db: DB, index: Index) -> impl warp::reply::
   warp::reply::json(&records)
 }
 
+#[derive(Debug, Deserialize)]
 struct DebugNodesParams {
   query: String,
 }
@@ -78,6 +80,7 @@ fn debug_nodes(params: DebugNodesParams, index: Index) -> impl warp::reply::Repl
   warp::reply::json(&nodes)
 }
 
+#[derive(Debug, Deserialize)]
 struct QueryRecordsParams {
   query: String,
 }

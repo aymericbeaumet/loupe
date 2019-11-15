@@ -7,7 +7,6 @@ mod record;
 mod services;
 mod tokenizer;
 
-use futures::try_join;
 use rocksdb::DB;
 
 #[tokio::main]
@@ -19,8 +18,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     index.add_record_slice(&record);
   }
 
-  try_join!(
-    warp::serve(services::public(index)).run([127, 0, 0, 1], 9191),
-    warp::serve(services::restricted(db, index)).run(([127, 0, 0, 1], 9292)),
-  )
+  futures::join!(
+    async {
+      warp::serve(services::public(index)).run(([127, 0, 0, 1], 9191));
+    },
+    async {
+      warp::serve(services::restricted(db, index)).run(([127, 0, 0, 1], 9292));
+    }
+  );
+
+  Ok(())
 }
