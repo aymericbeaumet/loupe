@@ -97,8 +97,20 @@ impl Serialize for Node {
   }
 }
 
+/// Index contains the root to an AST storing both the records and the associated
+/// ART nodes. The data is stored in an arena, and cannot be freed for now. On
+/// top of this the root_key is immutable, which means the Index can safely and
+/// inexpensively be copied/cloned around.
 pub struct Index {
   root_key: ArenaTypeKey<Node>,
+}
+
+impl Copy for Index {}
+
+impl Clone for Index {
+  fn clone(&self) -> Index {
+    *self
+  }
 }
 
 impl Index {
