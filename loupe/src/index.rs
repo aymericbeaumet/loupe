@@ -8,6 +8,7 @@ lazy_static! {
   static ref ARENA: Arena = Arena::new();
 }
 
+#[derive(Copy, Clone)]
 pub struct Node {
   children: [ArenaTypeKey<Node>; 256],
   records: [ArenaSliceKey<u8>; 256],
@@ -147,7 +148,7 @@ impl Index {
     });
   }
 
-  pub fn query_nodes(&self, query: &str) -> impl Iterator<Item = (String, &Node)> + '_ {
+  pub fn query_nodes(&self, query: &str) -> impl Iterator<Item = (String, &Node)> {
     let root = ARENA.get_unchecked(&self.root_key);
     query.tokenize().into_iter().filter_map(move |token| {
       root

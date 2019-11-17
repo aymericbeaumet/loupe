@@ -133,7 +133,7 @@ impl Drop for Arena {
   }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct ArenaTypeKey<T> {
   offset: u32,
   _t: PhantomData<T>,
@@ -153,7 +153,7 @@ impl<T> ArenaTypeKey<T> {
   }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct ArenaSliceKey<T> {
   offset: u32,
   len: u32,
