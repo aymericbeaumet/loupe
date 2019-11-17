@@ -103,7 +103,7 @@ impl Serialize for Node {
 /// top of this the root_key is immutable, which means the Index can safely and
 /// inexpensively be copied/cloned around.
 pub struct Index {
-  root_key: ArenaTypeKey<Node>,
+  root_key: ArenaTypeKey<Node>, // TODO: store in u8 instead -> ArenaTypeKey<u8, Node>
 }
 
 impl Copy for Index {}
