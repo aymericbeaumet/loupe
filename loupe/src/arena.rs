@@ -2,7 +2,7 @@ use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::marker::PhantomData;
 use std::ptr;
 use std::slice;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 // TODO: we will need this someday, right now we just make sure the address 0x0
 // is not publicly available outside the arena by allocating an empty header at
@@ -70,14 +70,6 @@ impl Arena {
     &*(src as *const T)
   }
 
-  #[inline(always)]
-  pub fn atomic<T>(&self, key: ArenaTypeKey<T>) -> &AtomicU32 {
-    unsafe {
-      let ptr = self.ptr.offset(key.offset as isize);
-      &*(ptr as *const _ as *const _)
-    }
-  }
-
   // Slice
 
   #[inline(always)]
@@ -112,14 +104,6 @@ impl Arena {
     let src = self.ptr.offset(key.offset as isize) as *const _;
     std::slice::from_raw_parts(src, key.len as usize)
   }
-
-  #[inline(always)]
-  pub fn atomic_slice<T>(&self, key: ArenaSliceKey<T>) -> &AtomicU64 {
-    unsafe {
-      let ptr = self.ptr.offset(key.offset as isize);
-      &*(ptr as *const _ as *const _)
-    }
-  }
 }
 
 impl Drop for Arena {
@@ -128,7 +112,7 @@ impl Drop for Arena {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ArenaTypeKey<T> {
   offset: u32,
   _t: PhantomData<T>,
@@ -148,7 +132,7 @@ impl<T> ArenaTypeKey<T> {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ArenaSliceKey<T> {
   offset: u32,
   len: u32,

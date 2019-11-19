@@ -4,7 +4,7 @@ use crate::tokenizer::TokenizerExt;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::mem;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 lazy_static! {
   static ref ARENA: Arena = Arena::new();
@@ -18,9 +18,11 @@ pub struct Node {
 
 impl Node {
   // Add a child to the current node
-  pub fn add_child(&self, key: u8, child: ArenaTypeKey<Self>) {
-    let dst = ARENA.atomic(self.children[key as usize]);
-    unsafe { dst.store(mem::transmute_copy(&child), Ordering::Release) };
+  pub fn add_child(&self, byte: u8, child_key: ArenaTypeKey<Self>) {
+    let ptr = &self.children[byte as usize];
+    let atomic: &AtomicU32 = unsafe { &*(ptr as *const _ as *const _) };
+    let val = unsafe { mem::transmute_copy(&child_key) };
+    atomic.store(val, Ordering::Release);
   }
 
   // Find a child of the current node
@@ -39,14 +41,15 @@ impl Node {
       .children
       .iter()
       .enumerate()
-      .filter_map(|(key, child_key)| {
+      .filter_map(|(key, &child_key)| {
         ARENA
-          .get(*child_key)
+          .get(child_key)
           .map(|child_node| (key as u8, child_node))
       })
   }
 
   // Return an iterator for all the children starting from the current node
+  // TODO: remove Box
   pub fn children_deep(&self) -> Box<dyn Iterator<Item = (u8, &Self)> + '_> {
     Box::new(
       self
@@ -55,15 +58,14 @@ impl Node {
     )
   }
 
+  // Add a new record to the node
   pub fn add_record(&self, key: ArenaSliceKey<u8>) {
-    for (i, &record_key) in self.records.iter().enumerate() {
-      if record_key == key {
-        break;
-      }
-      let dst = ARENA.atomic_slice(self.records[i]);
-      let previous =
-        unsafe { dst.compare_and_swap(0, mem::transmute_copy(&key), Ordering::Release) };
-      if previous == 0 {
+    let current = 0;
+    let new = unsafe { mem::transmute_copy(&key) };
+    for ptr in self.records.iter() {
+      let atomic: &AtomicU64 = unsafe { &*(ptr as *const _ as *const _) };
+      let previous = atomic.compare_and_swap(current, new, Ordering::Release);
+      if previous == current {
         break;
       }
     }
@@ -133,7 +135,6 @@ impl Index {
       let insertion_node = token.bytes().fold(
         unsafe { ARENA.get_unchecked(self.root_key) },
         |node, byte| {
-          debug!("{} {}", token, byte);
           if let Some(child) = node.child(byte) {
             child
           } else {
