@@ -3,14 +3,14 @@ use crate::record::Record;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-pub type AddRecordsParams = Vec<Record>;
+pub type RecordsParams = Vec<Record>;
 
 #[derive(Deserialize)]
 pub struct QueryParams {
   query: String,
 }
 
-pub fn add_records(params: AddRecordsParams, index: Index) -> impl warp::reply::Reply {
+pub fn add_records(params: RecordsParams, index: Index) -> impl warp::reply::Reply {
   for record in params.iter() {
     let record_as_string = record.to_string();
     let record_as_bytes = record_as_string.as_bytes();

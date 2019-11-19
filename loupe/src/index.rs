@@ -3,6 +3,8 @@ use crate::record::Record;
 use crate::tokenizer::TokenizerExt;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::mem;
+use std::sync::atomic::Ordering;
 
 lazy_static! {
   static ref ARENA: Arena = Arena::new();
@@ -17,12 +19,13 @@ pub struct Node {
 impl Node {
   // Add a child to the current node
   pub fn add_child(&self, key: u8, child: ArenaTypeKey<Self>) {
-    // self.children[key as usize] = child;
+    let dst = ARENA.atomic(self.children[key as usize]);
+    unsafe { dst.store(mem::transmute_copy(&child), Ordering::Release) };
   }
 
   // Find a child of the current node
   pub fn child(&self, key: u8) -> Option<&Self> {
-    ARENA.get(&self.children[key as usize])
+    ARENA.get(self.children[key as usize])
   }
 
   // Find a child starting from the current node
@@ -38,7 +41,7 @@ impl Node {
       .enumerate()
       .filter_map(|(key, child_key)| {
         ARENA
-          .get(child_key)
+          .get(*child_key)
           .map(|child_node| (key as u8, child_node))
       })
   }
@@ -52,16 +55,18 @@ impl Node {
     )
   }
 
-  pub fn add_record(&self, key: &ArenaSliceKey<u8>) {
-    // for key in insertion_node.records.iter_mut() {
-    //   if key == &record_key {
-    //     break;
-    //   }
-    //   if key.is_null() {
-    //     *key = record_key;
-    //     break;
-    //   }
-    // }
+  pub fn add_record(&self, key: ArenaSliceKey<u8>) {
+    for (i, &record_key) in self.records.iter().enumerate() {
+      if record_key == key {
+        break;
+      }
+      let dst = ARENA.atomic_slice(self.records[i]);
+      let previous =
+        unsafe { dst.compare_and_swap(0, mem::transmute_copy(&key), Ordering::Release) };
+      if previous == 0 {
+        break;
+      }
+    }
   }
 
   // Return an iterator for the records of the current node
@@ -71,7 +76,7 @@ impl Node {
       .iter()
       .take_while(|key| !key.is_null())
       .map(|key| {
-        let bytes = ARENA.get_slice_unchecked(key);
+        let bytes = unsafe { ARENA.get_slice_unchecked(key) };
         serde_json::from_slice(bytes).unwrap()
       })
   }
@@ -102,16 +107,9 @@ impl Serialize for Node {
 /// ART nodes. The data is stored in an arena, and cannot be freed for now. On
 /// top of this the root_key is immutable, which means the Index can safely and
 /// inexpensively be copied/cloned around.
+#[derive(Copy, Clone)]
 pub struct Index {
   root_key: ArenaTypeKey<Node>, // TODO: store in u8 instead -> ArenaTypeKey<u8, Node>
-}
-
-impl Copy for Index {}
-
-impl Clone for Index {
-  fn clone(&self) -> Index {
-    *self
-  }
 }
 
 impl Index {
@@ -120,36 +118,38 @@ impl Index {
     Self { root_key }
   }
 
-  pub fn add_record_slice(&self, bytes: &[u8]) {
+  pub fn add_record_slice(self, bytes: &[u8]) {
     let stored = ARENA.alloc_slice_copy(bytes);
     let record: Record = serde_json::from_slice(bytes).unwrap();
     record.values().for_each(|value| {
       if let serde_json::Value::String(value) = value {
-        self.insert(value, &stored);
+        self.insert(value, stored);
       }
     })
   }
 
-  pub fn insert(&self, key: &str, record_key: &ArenaSliceKey<u8>) {
+  pub fn insert(self, key: &str, record_key: ArenaSliceKey<u8>) {
     key.tokenize().into_iter().for_each(|token| {
-      let insertion_node = token
-        .bytes()
-        .fold(ARENA.get_unchecked(&self.root_key), |node, byte| {
+      let insertion_node = token.bytes().fold(
+        unsafe { ARENA.get_unchecked(self.root_key) },
+        |node, byte| {
+          debug!("{} {}", token, byte);
           if let Some(child) = node.child(byte) {
             child
           } else {
             let child_key = ARENA.alloc();
-            let child = ARENA.get_unchecked(&child_key);
+            let child = unsafe { ARENA.get_unchecked(child_key) };
             node.add_child(byte, child_key);
             child
           }
-        });
+        },
+      );
       insertion_node.add_record(record_key);
     });
   }
 
-  pub fn query_nodes(&self, query: &str) -> impl Iterator<Item = (String, &Node)> {
-    let root = ARENA.get_unchecked(&self.root_key);
+  pub fn query_nodes(self, query: &str) -> impl Iterator<Item = (String, &Node)> {
+    let root = unsafe { ARENA.get_unchecked(self.root_key) };
     query.tokenize().into_iter().filter_map(move |token| {
       root
         .child_deep(token.as_bytes())
@@ -157,7 +157,7 @@ impl Index {
     })
   }
 
-  pub fn query_records(&self, query: &str) -> impl Iterator<Item = Record> + '_ {
+  pub fn query_records(self, query: &str) -> impl Iterator<Item = Record> + '_ {
     self
       .query_nodes(query)
       .flat_map(|(_word, node)| node.records_deep())

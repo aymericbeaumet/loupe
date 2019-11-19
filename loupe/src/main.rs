@@ -2,6 +2,9 @@
 extern crate lazy_static;
 
 #[macro_use]
+extern crate log;
+
+#[macro_use]
 extern crate warp;
 
 mod arena;
@@ -16,8 +19,8 @@ async fn main() {
   pretty_env_logger::init();
 
   let index = index::Index::new();
-  let public_service = services::public(index);
   let private_service = services::private(index);
+  let public_service = services::public(index);
 
-  futures::join!(public_service, private_service);
+  futures::join!(private_service, public_service);
 }
