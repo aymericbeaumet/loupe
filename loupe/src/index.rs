@@ -18,8 +18,8 @@ pub struct Node {
 
 impl Node {
   // Add a child to the current node
-  pub fn add_child(&self, byte: u8, child_key: ArenaTypeKey<Self>) {
-    let ptr = &self.children[byte as usize];
+  pub fn add_child(&self, key: u8, child_key: ArenaTypeKey<Self>) {
+    let ptr = &self.children[key as usize];
     let atomic: &AtomicU32 = unsafe { &*(ptr as *const _ as *const _) };
     let val = unsafe { mem::transmute_copy(&child_key) };
     atomic.store(val, Ordering::Release);
