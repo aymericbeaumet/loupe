@@ -20,7 +20,8 @@ pub fn private(index: Index) -> impl futures::future::Future {
 
   let cors = warp::cors()
     .allow_origin("http://localhost:1234")
-    .allow_methods(vec!["POST", "GET"]);
+    .allow_methods(vec!["POST", "GET"])
+    .allow_headers(vec!["content-type"]);
   let log = warp::log("services::private");
 
   warp::serve(routes.with(cors).with(log)).run(([127, 0, 0, 1], 9191))
@@ -37,7 +38,10 @@ pub fn public(index: Index) -> impl futures::future::Future {
 
   let routes = query_records_post.or(query_records_get);
 
-  let cors = warp::cors().allow_any_origin().allow_methods(vec!["GET"]);
+  let cors = warp::cors()
+    .allow_any_origin()
+    .allow_methods(vec!["POST", "GET"])
+    .allow_headers(vec!["content-type"]);
   let log = warp::log("services::public");
 
   warp::serve(routes.with(cors).with(log)).run(([127, 0, 0, 1], 9292))
