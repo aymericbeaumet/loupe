@@ -120,9 +120,13 @@ impl Index {
     Self { root_key }
   }
 
-  pub fn add_record_slice(self, bytes: &[u8]) {
-    let stored = ARENA.alloc_slice_copy(bytes);
-    let record: Record = serde_json::from_slice(bytes).unwrap();
+  pub fn add_records(self, records: &[Record]) {
+    records.iter().for_each(|record| self.add_record(record));
+  }
+
+  pub fn add_record(self, record: &Record) {
+    let string = record.to_string();
+    let stored = ARENA.alloc_slice_copy(string.as_bytes());
     record.values().for_each(|value| {
       if let serde_json::Value::String(value) = value {
         self.insert(value, stored);
@@ -130,7 +134,7 @@ impl Index {
     })
   }
 
-  pub fn insert(self, key: &str, record_key: ArenaSliceKey<u8>) {
+  fn insert(self, key: &str, record_key: ArenaSliceKey<u8>) {
     key.tokenize().for_each(|token| {
       let insertion_node = token.bytes().fold(
         unsafe { ARENA.get_unchecked(self.root_key) },
@@ -162,6 +166,6 @@ impl Index {
     self
       .query_nodes(query)
       .flat_map(|(_word, node)| node.records_deep())
-      .unique_by(|record| record.id)
+      .unique_by(|record| record.id())
   }
 }

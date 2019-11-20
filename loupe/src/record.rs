@@ -4,7 +4,7 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Record {
   #[serde(default = "default_id")]
-  pub id: u128,
+  id: u128,
   #[serde(flatten)]
   attributes: HashMap<String, serde_json::Value>,
 }
@@ -16,6 +16,10 @@ impl ToString for Record {
 }
 
 impl Record {
+  pub fn id(&self) -> u128 {
+    self.id
+  }
+
   pub fn values(&self) -> impl Iterator<Item = &serde_json::Value> {
     self.attributes.values()
   }

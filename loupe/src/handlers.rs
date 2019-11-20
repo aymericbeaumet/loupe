@@ -10,12 +10,9 @@ pub struct QueryParams {
   query: String,
 }
 
+// TODO: does not return the records attributes as serde flatten
 pub fn add_records(params: RecordsParams, index: Index) -> impl warp::reply::Reply {
-  for record in params.iter() {
-    let record_as_string = record.to_string();
-    let record_as_bytes = record_as_string.as_bytes();
-    index.add_record_slice(record_as_bytes);
-  }
+  index.add_records(&params);
   warp::reply::json(&params)
 }
 
