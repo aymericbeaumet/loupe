@@ -1,23 +1,23 @@
-#![feature(decl_macro, proc_macro_hygiene)]
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
-extern crate rocket;
+extern crate warp;
 
 mod arena;
-mod child;
+mod handlers;
 mod index;
-mod parent;
 mod record;
+mod services;
 mod tokenizer;
 
-use index::Index;
-use nix::unistd::{fork, ForkResult};
+#[tokio::main]
+async fn main() {
+  pretty_env_logger::init();
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let index = Index::new();
-  match fork()? {
-    ForkResult::Parent { .. } => parent::main(index),
-    ForkResult::Child => child::main(index),
-  }?;
-  Ok(())
+  let index = index::Index::new();
+  let private_service = services::private(index);
+  let public_service = services::public(index);
+
+  futures::join!(private_service, public_service);
 }

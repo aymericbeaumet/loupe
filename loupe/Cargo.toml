@@ -5,14 +5,15 @@ authors = ["Aymeric Beaumet <hi@aymericbeaumet.com>"]
 edition = "2018"
 
 [dependencies]
+futures = "0.3.1"
 itertools = "0.8.1"
-memmap = "0.7.0"
-nix = "0.15.0"
-rocket = "0.4.2"
-rocket_contrib = "0.4.2"
-rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb.git", rev = "4ca979c24f0685f709fe06cd8ac7f66f4a76a8a1" }
+lazy_static = "1.4.0"
+log = "0.4.8"
+pretty_env_logger = "0.3.1"
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
+tokio = "0.2.0-alpha.6"
 unicode-segmentation = "1.6.0"
 unidecode = "0.3.0"
 uuid = { version = "0.8.1", features = ["v4"] }
+warp = { git = "https://github.com/seanmonstar/warp.git", rev = "9bb58102b7e7c989b037c8ccc9e3c332efdd2579" }

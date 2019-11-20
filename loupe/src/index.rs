@@ -1,20 +1,33 @@
-use crate::arena::{Arena, TypedArena};
+use crate::arena::{Arena, ArenaSliceKey, ArenaTypeKey};
 use crate::record::Record;
 use crate::tokenizer::TokenizerExt;
 use itertools::Itertools;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::mem;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-#[derive(Clone, Copy)]
-pub struct Node256 {
-  children_ptrs: [*mut Node256; 256],
-  leaf_ptr: *mut Leaf256,
+lazy_static! {
+  static ref ARENA: Arena = Arena::new();
 }
 
-impl Node256 {
+#[derive(Copy, Clone)]
+pub struct Node {
+  children: [ArenaTypeKey<Node>; 256],
+  records: [ArenaSliceKey<u8>; 256],
+}
+
+impl Node {
+  // Add a child to the current node
+  pub fn add_child(&self, byte: u8, child_key: ArenaTypeKey<Self>) {
+    let ptr = &self.children[byte as usize];
+    let atomic: &AtomicU32 = unsafe { &*(ptr as *const _ as *const _) };
+    let val = unsafe { mem::transmute_copy(&child_key) };
+    atomic.store(val, Ordering::Release);
+  }
+
   // Find a child of the current node
   pub fn child(&self, key: u8) -> Option<&Self> {
-    let child_ptr = self.children_ptrs[key as usize];
-    unsafe { child_ptr.as_ref() }
+    ARENA.get(self.children[key as usize])
   }
 
   // Find a child starting from the current node
@@ -25,15 +38,18 @@ impl Node256 {
   // Return an iterator for the children of the current node
   pub fn children(&self) -> impl Iterator<Item = (u8, &Self)> {
     self
-      .children_ptrs
+      .children
       .iter()
       .enumerate()
-      .filter_map(|(key, child_ptr)| {
-        unsafe { child_ptr.as_ref() }.map(|child_node| (key as u8, child_node))
+      .filter_map(|(key, &child_key)| {
+        ARENA
+          .get(child_key)
+          .map(|child_node| (key as u8, child_node))
       })
   }
 
   // Return an iterator for all the children starting from the current node
+  // TODO: remove Box
   pub fn children_deep(&self) -> Box<dyn Iterator<Item = (u8, &Self)> + '_> {
     Box::new(
       self
@@ -42,16 +58,27 @@ impl Node256 {
     )
   }
 
+  // Add a new record to the node
+  pub fn add_record(&self, key: ArenaSliceKey<u8>) {
+    let current = 0;
+    let new = unsafe { mem::transmute_copy(&key) };
+    for ptr in self.records.iter() {
+      let atomic: &AtomicU64 = unsafe { &*(ptr as *const _ as *const _) };
+      let previous = atomic.compare_and_swap(current, new, Ordering::Release);
+      if previous == current {
+        break;
+      }
+    }
+  }
+
   // Return an iterator for the records of the current node
-  pub fn records(&self) -> impl Iterator<Item = Record> {
-    unsafe { self.leaf_ptr.as_ref() }
-      .into_iter()
-      .flat_map(|leaf| leaf.records.chunks_exact(2))
-      .map(|chunk| (chunk[0], chunk[1]))
-      .take_while(|(ptr_start, ptr_end)| !ptr_start.is_null() && !ptr_end.is_null())
-      .map(|(ptr_start, ptr_end)| {
-        let len = ptr_end as usize - ptr_start as usize;
-        let bytes = unsafe { std::slice::from_raw_parts(ptr_start, len) };
+  pub fn records(&self) -> impl Iterator<Item = Record> + '_ {
+    self
+      .records
+      .iter()
+      .take_while(|key| !key.is_null())
+      .map(|key| {
+        let bytes = unsafe { ARENA.get_slice_unchecked(key) };
         serde_json::from_slice(bytes).unwrap()
       })
   }
@@ -66,50 +93,35 @@ impl Node256 {
   }
 }
 
-impl Serialize for Node256 {
+impl Serialize for Node {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
     S: Serializer,
   {
-    let mut state = serializer.serialize_struct("Node256", 2)?;
+    let mut state = serializer.serialize_struct("Node", 2)?;
     state.serialize_field("children", &self.children().collect::<Vec<_>>())?;
     state.serialize_field("records", &self.records().collect::<Vec<_>>())?;
     state.end()
   }
 }
 
-pub struct Leaf256 {
-  records: [*const u8; 2 * 128],
-}
-
+/// Index contains the root to an AST storing both the records and the associated
+/// ART nodes. The data is stored in an arena, and cannot be freed for now. On
+/// top of this the root_key is immutable, which means the Index can safely and
+/// inexpensively be copied/cloned around.
+#[derive(Copy, Clone)]
 pub struct Index {
-  root_ptr: *mut Node256,
-  nodes: TypedArena<Node256>,
-  leaves: TypedArena<Leaf256>,
-  records: Arena,
+  root_key: ArenaTypeKey<Node>, // TODO: store in u8 instead -> ArenaTypeKey<u8, Node>
 }
-
-unsafe impl Send for Index {}
-unsafe impl Sync for Index {}
 
 impl Index {
   pub fn new() -> Self {
-    let mut index = Self {
-      root_ptr: std::ptr::null_mut(),
-      nodes: TypedArena::new(100_000_000),
-      leaves: TypedArena::new(100_000_000),
-      records: Arena::new(100_000_000),
-    };
-    index.root_ptr = index.nodes.alloc().unwrap();
-    index
+    let root_key = ARENA.alloc();
+    Self { root_key }
   }
 
-  pub fn root_node(&self) -> &Node256 {
-    unsafe { &*self.root_ptr }
-  }
-
-  pub fn add_record_slice(&mut self, bytes: &[u8]) {
-    let stored = self.records.store(bytes).unwrap();
+  pub fn add_record_slice(self, bytes: &[u8]) {
+    let stored = ARENA.alloc_slice_copy(bytes);
     let record: Record = serde_json::from_slice(bytes).unwrap();
     record.values().for_each(|value| {
       if let serde_json::Value::String(value) = value {
@@ -118,52 +130,35 @@ impl Index {
     })
   }
 
-  pub fn insert(&mut self, key: &str, (record_ptr_start, record_ptr_end): (*const u8, *const u8)) {
+  pub fn insert(self, key: &str, record_key: ArenaSliceKey<u8>) {
     key.tokenize().for_each(|token| {
-      let mut current_ptr = self.root_ptr;
-      token.bytes().for_each(|byte| {
-        let current_node = unsafe { &mut *current_ptr };
-        let child_ptr = current_node.children_ptrs[byte as usize];
-        if !child_ptr.is_null() {
-          current_ptr = child_ptr;
-        } else {
-          let child_ptr = self.nodes.alloc().unwrap();
-          let child_node = unsafe { &mut *current_ptr };
-          child_node.children_ptrs[byte as usize] = child_ptr;
-          current_ptr = child_ptr;
-        }
-      });
-      let mut current_node = unsafe { &mut *current_ptr };
-      if current_node.leaf_ptr.is_null() {
-        current_node.leaf_ptr = self.leaves.alloc().unwrap();
-      }
-      let leaf = unsafe { &mut *current_node.leaf_ptr };
-      for i in (0..leaf.records.len()).step_by(2) {
-        if leaf.records[i] == record_ptr_start {
-          break;
-        }
-        if leaf.records[i].is_null() {
-          leaf.records[i] = record_ptr_start;
-          leaf.records[i + 1] = record_ptr_end;
-          break;
-        }
-      }
+      let insertion_node = token.bytes().fold(
+        unsafe { ARENA.get_unchecked(self.root_key) },
+        |node, byte| {
+          if let Some(child) = node.child(byte) {
+            child
+          } else {
+            let child_key = ARENA.alloc();
+            let child = unsafe { ARENA.get_unchecked(child_key) };
+            node.add_child(byte, child_key);
+            child
+          }
+        },
+      );
+      insertion_node.add_record(record_key);
     });
   }
 
-  pub fn query_nodes<'a>(
-    &'a self,
-    query: &'a str,
-  ) -> impl Iterator<Item = (String, &Node256)> + 'a {
-    let root_node = self.root_node();
+  pub fn query_nodes(self, query: &str) -> impl Iterator<Item = (String, &Node)> {
+    let root = unsafe { ARENA.get_unchecked(self.root_key) };
     query.tokenize().filter_map(move |token| {
-      root_node
+      root
         .child_deep(token.as_bytes())
         .map(|child| (token, child))
     })
   }
 
-  pub fn query_records<'a>(&'a self, query: &'a str) -> impl Iterator<Item = Record> + 'a {
+  pub fn query_records(self, query: &str) -> impl Iterator<Item = Record> + '_ {
     self
       .query_nodes(query)
       .flat_map(|(_word, node)| node.records_deep())

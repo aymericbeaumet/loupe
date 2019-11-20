@@ -8,6 +8,7 @@ pub trait TokenizerExt {
 }
 
 impl<'a> TokenizerExt for &'a str {
+  // TODO: use `impl ...` instead (when it supports lifetimes)
   type Iter = std::iter::Map<unicode_segmentation::UnicodeWords<'a>, fn(&str) -> String>;
 
   fn tokenize(&self) -> Self::Iter {
