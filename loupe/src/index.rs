@@ -131,7 +131,7 @@ impl Index {
   }
 
   pub fn insert(self, key: &str, record_key: ArenaSliceKey<u8>) {
-    key.tokenize().into_iter().for_each(|token| {
+    key.tokenize().for_each(|token| {
       let insertion_node = token.bytes().fold(
         unsafe { ARENA.get_unchecked(self.root_key) },
         |node, byte| {
@@ -151,7 +151,7 @@ impl Index {
 
   pub fn query_nodes(self, query: &str) -> impl Iterator<Item = (String, &Node)> {
     let root = unsafe { ARENA.get_unchecked(self.root_key) };
-    query.tokenize().into_iter().filter_map(move |token| {
+    query.tokenize().filter_map(move |token| {
       root
         .child_deep(token.as_bytes())
         .map(|child| (token, child))
