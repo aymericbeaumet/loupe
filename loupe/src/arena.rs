@@ -24,9 +24,12 @@ pub struct Arena {
 unsafe impl Send for Arena {}
 unsafe impl Sync for Arena {}
 
+// Aligned on 64 bits as quadword RW are guaranteed to be carried atomically
+// since Pentium processors (see: 8.1.1 Guaranteed Atomic Operations,
+// https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-3a-part-1-manual.pdf)
 impl Arena {
   pub fn new() -> Self {
-    let layout = Layout::from_size_align(100_000_000, 32).expect("Unable to align layout");
+    let layout = Layout::from_size_align(100_000_000, 64).expect("Unable to align layout");
     let arena = Self {
       layout,
       ptr: unsafe { alloc_zeroed(layout) },
@@ -68,6 +71,10 @@ impl Arena {
   pub unsafe fn get_unchecked<T>(&self, key: ArenaTypeKey<T>) -> &T {
     let src = self.ptr.offset(key.offset as isize);
     &*(src as *const T)
+  }
+
+  pub fn free<T>(&self, key: ArenaTypeKey<T>, when: u32) {
+    // TODO
   }
 
   // Slice

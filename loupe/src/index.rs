@@ -17,12 +17,23 @@ pub struct Node {
 }
 
 impl Node {
-  // Add a child to the current node
-  pub fn add_child(&self, key: u8, child_key: ArenaTypeKey<Self>) {
+  // Atomically get a child, create it if needed
+  pub fn upsert_child(&self, key: u8) -> &Self {
+    let child_key = ARENA.alloc::<Node>();
+    let current = 0;
+    let new = unsafe { mem::transmute_copy(&child_key) };
     let ptr = &self.children[key as usize];
     let atomic: &AtomicU32 = unsafe { &*(ptr as *const _ as *const _) };
-    let val = unsafe { mem::transmute_copy(&child_key) };
-    atomic.store(val, Ordering::Release);
+    let previous = atomic.compare_and_swap(current, new, Ordering::Release);
+    if previous == current {
+      // swap succeed, return the new child node
+      unsafe { ARENA.get_unchecked(child_key) }
+    } else {
+      // swap failed, return the previous child node
+      ARENA.free(child_key, 0);
+      let child_key = unsafe { mem::transmute_copy(&previous) };
+      unsafe { ARENA.get_unchecked(child_key) }
+    }
   }
 
   // Find a child of the current node
@@ -65,7 +76,8 @@ impl Node {
     for ptr in self.records.iter() {
       let atomic: &AtomicU64 = unsafe { &*(ptr as *const _ as *const _) };
       let previous = atomic.compare_and_swap(current, new, Ordering::Release);
-      if previous == current {
+      // break when `new` is properly stored, or if `new` already exists
+      if previous == current || previous == new {
         break;
       }
     }
@@ -138,16 +150,7 @@ impl Index {
     key.tokenize().for_each(|token| {
       let insertion_node = token.bytes().fold(
         unsafe { ARENA.get_unchecked(self.root_key) },
-        |node, byte| {
-          if let Some(child) = node.child(byte) {
-            child
-          } else {
-            let child_key = ARENA.alloc();
-            let child = unsafe { ARENA.get_unchecked(child_key) };
-            node.add_child(byte, child_key);
-            child
-          }
-        },
+        |node, byte| node.upsert_child(byte),
       );
       insertion_node.add_record(record_key);
     });
